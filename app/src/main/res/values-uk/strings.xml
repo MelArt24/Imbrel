@@ -24,6 +24,9 @@
     <string name="temperature_synchronization">Синхронізація температури</string>
     <string name="hours">Наступні 24 Години</string>
     <string name="days">Дні</string>
+    <string name="loading_weather">Завантажуємо погоду</string>
+    <string name="no_hourly_data_available">Погодинна погода не доступна</string>
+    <string name="no_daily_data_available">Щоденний прогноз недоступний</string>
     <string name="sunny">Сонячно</string>
     <string name="weather_icon">Іконка погоди</string>
     <string name="enable_location">Увімкнути геолокацію?</string>
