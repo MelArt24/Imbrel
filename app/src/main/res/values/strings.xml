@@ -24,6 +24,9 @@
     <string name="temperature_synchronization">Temperature synchronization</string>
     <string name="hours">Next 24 Hours</string>
     <string name="days">Days</string>
+    <string name="loading_weather">Loading weather</string>
+    <string name="no_hourly_data_available">No hourly data available</string>
+    <string name="no_daily_data_available">No daily forecast available</string>
     <string name="sunny">Sunny</string>
     <string name="weather_icon">Weather icon</string>
     <string name="enable_location">Enable location?</string>

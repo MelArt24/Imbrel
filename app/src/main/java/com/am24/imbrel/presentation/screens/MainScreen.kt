@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -167,30 +168,51 @@ fun MainScreenContent(
                                 .padding(24.dp),
                     )
                 } else {
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(10.dp),
-                    ) {
-                        MainCard(
-                            weather = uiState.displayedWeather,
-                            onSyncClick = onLocationClick,
-                            onSearchClick = onSearchClick,
-                        )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp),
+                        ) {
+                            MainCard(
+                                weather = uiState.displayedWeather,
+                                onSyncClick = onLocationClick,
+                                onSearchClick = onSearchClick,
+                            )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                        WeatherTabs(
-                            displayedWeather = uiState.displayedWeather,
-                            dailyWeather = uiState.dailyWeather,
-                            isLoading = uiState.isLoading && !uiState.hasWeather,
-                            onDayClick = onDayClick,
-                        )
+                            WeatherTabs(
+                                displayedWeather = uiState.displayedWeather,
+                                dailyWeather = uiState.dailyWeather,
+                                isLoading = uiState.isLoading && !uiState.hasWeather,
+                                onDayClick = onDayClick,
+                            )
+                        }
+
+                        if (uiState.isRefreshing) {
+                            WeatherRefreshOverlay()
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WeatherRefreshOverlay() {
+    val loadingDescription = stringResource(R.string.loading_weather)
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .semantics { contentDescription = loadingDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(color = Color.White)
     }
 }
 
@@ -428,7 +450,10 @@ fun HoursList(
 
     if (hours.isEmpty() && !isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "No hourly data available", color = Color.White.copy(alpha = 0.6f))
+            Text(
+                text = stringResource(R.string.no_hourly_data_available),
+                color = Color.White.copy(alpha = 0.6f),
+            )
         }
     } else if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -454,7 +479,10 @@ fun DaysList(
 ) {
     if (days.isEmpty() && !isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "No hourly data available", color = Color.White.copy(alpha = 0.6f))
+            Text(
+                text = stringResource(R.string.no_daily_data_available),
+                color = Color.White.copy(alpha = 0.6f),
+            )
         }
     } else if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

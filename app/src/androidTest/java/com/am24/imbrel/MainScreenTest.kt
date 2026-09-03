@@ -2,7 +2,9 @@ package com.am24.imbrel
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.NetworkErrorReason
 import com.am24.imbrel.presentation.WeatherUiError
@@ -66,6 +68,30 @@ class MainScreenTest {
             .onNodeWithText(
                 "No internet connection and no cached weather is available",
             ).assertIsDisplayed()
+    }
+
+    @Test
+    fun loadingOverlay_isVisibleOverExistingWeatherDuringRefresh() {
+        showScreen(
+            isOnline = true,
+            uiState =
+                WeatherUiState(
+                    status = WeatherUiStatus.Success,
+                    currentWeather = weather("Kyiv"),
+                    isRefreshing = true,
+                ),
+        )
+
+        composeRule.onNodeWithText("Kyiv").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Loading weather").assertIsDisplayed()
+    }
+
+    @Test
+    fun daysTab_showsDailyEmptyState() {
+        showScreen(isOnline = true)
+
+        composeRule.onNodeWithText("DAYS").performClick()
+        composeRule.onNodeWithText("No daily forecast available").assertIsDisplayed()
     }
 
     private fun showScreen(
