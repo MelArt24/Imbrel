@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.detekt)
     alias(libs.plugins.ktlint)
     id("org.jetbrains.kotlinx.kover") version "0.9.8"
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -19,7 +20,7 @@ android {
         applicationId = "com.am24.imbrel"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -47,10 +48,6 @@ android {
         viewBinding = true
         buildConfig = true
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     packagingOptions {

@@ -11,7 +11,7 @@ internal fun formatDailyForecastDate(
 ): String =
     try {
         val weekday = LocalDate.parse(date).format(DateTimeFormatter.ofPattern("EEE", locale))
-        "${date} (${weekday})"
+        "$date ($weekday)"
     } catch (_: DateTimeParseException) {
         date
     }

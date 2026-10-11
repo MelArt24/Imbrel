@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -69,6 +70,7 @@ import com.am24.imbrel.presentation.WeatherIconHelper
 import com.am24.imbrel.presentation.WeatherUiError
 import com.am24.imbrel.presentation.WeatherUiEvent
 import com.am24.imbrel.presentation.WeatherUiState
+import com.am24.imbrel.presentation.formatter.formatDailyForecastDate
 import com.am24.imbrel.presentation.model.WeatherModel
 import com.am24.imbrel.presentation.theme.Black
 import com.am24.imbrel.presentation.theme.BlueBg
@@ -477,6 +479,7 @@ fun DaysList(
     isLoading: Boolean,
     onDayClick: (WeatherModel) -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     if (days.isEmpty() && !isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
@@ -494,7 +497,11 @@ fun DaysList(
             contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
         ) {
             items(days) { item ->
-                WeatherListItem(item, onClick = { onDayClick(item) })
+                WeatherListItem(
+                    item = item,
+                    onClick = { onDayClick(item) },
+                    timeLabel = formatDailyForecastDate(item.time, locale),
+                )
             }
         }
     }
@@ -504,6 +511,7 @@ fun DaysList(
 fun WeatherListItem(
     item: WeatherModel,
     onClick: () -> Unit,
+    timeLabel: String = item.time,
 ) {
     Card(
         modifier =
@@ -529,7 +537,7 @@ fun WeatherListItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.time,
+                    text = timeLabel,
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.Gray,
                 )
