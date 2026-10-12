@@ -4,6 +4,8 @@ import com.am24.imbrel.domain.error.ApiErrorReason
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.model.CityWeatherResult
+import com.am24.imbrel.domain.model.LocationCoordinates
+import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.network.isOnlineOrDomainFailure
 import com.am24.imbrel.domain.repository.GeocodingRepository
@@ -22,7 +24,7 @@ class SearchCityWeatherUseCase(
         },
 ) {
     suspend operator fun invoke(city: String): CityWeatherResult {
-        val normalizedQuery = city.trim().replace(Regex("\\s+"), " ")
+        val normalizedQuery = SelectedPlace.City.normalizeQuery(city)
         if (normalizedQuery.isEmpty()) {
             throw DomainFailureException(
                 DomainError.Api(ApiErrorReason.RequestFailed),
@@ -33,6 +35,7 @@ class SearchCityWeatherUseCase(
             return CityWeatherResult(
                 forecast = weatherRepository.getWeatherData(city = normalizedQuery),
                 city = normalizedQuery,
+                normalizedQuery = normalizedQuery,
             )
         }
 
@@ -47,6 +50,8 @@ class SearchCityWeatherUseCase(
             )
         return CityWeatherResult(
             forecast = forecast,
+            normalizedQuery = normalizedQuery,
+            coordinates = LocationCoordinates(location.latitude, location.longitude),
             city =
                 location.localizedName?.takeIf { it.isNotBlank() }
                     ?: normalizedQuery,

@@ -6,6 +6,8 @@ import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.error.NetworkErrorReason
 import com.am24.imbrel.domain.model.CurrentWeather
 import com.am24.imbrel.domain.model.GeocodedLocation
+import com.am24.imbrel.domain.model.LocationCoordinates
+import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.model.WeatherForecast
 import com.am24.imbrel.domain.repository.GeocodingRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
@@ -36,6 +38,12 @@ class SearchCityWeatherUseCaseTest {
             assertEquals("Пекін", geocodingRepository.query)
             assertEquals("39.9042", weatherRepository.lat)
             assertEquals("116.4074", weatherRepository.lon)
+            assertEquals(geocodingRepository.query, result.normalizedQuery)
+            assertEquals(LocationCoordinates(39.9042, 116.4074), result.coordinates)
+            assertEquals(
+                SelectedPlace.City(result.normalizedQuery, result.city, result.coordinates),
+                result.toSelectedPlace(),
+            )
             assertEquals(geocodingRepository.query, weatherRepository.city)
             assertEquals("Пекін", result.city)
         }
@@ -52,6 +60,23 @@ class SearchCityWeatherUseCaseTest {
             val result = useCase("  Київ   Місто ")
 
             assertEquals("Київ Місто", result.city)
+        }
+
+    @Test
+    fun localizedDisplayName_doesNotReplaceNormalizedSearchQuery() =
+        runTest {
+            val result =
+                SearchCityWeatherUseCase(
+                    FakeWeatherRepository(),
+                    FakeGeocodingRepository(GeocodedLocation(50.45, 30.52, "Localized name")),
+                )("  Kyiv   City  ")
+
+            assertEquals("Kyiv City", result.normalizedQuery)
+            assertEquals("Localized name", result.city)
+            assertEquals(
+                SelectedPlace.City("Kyiv City", "Localized name", LocationCoordinates(50.45, 30.52)),
+                result.toSelectedPlace(),
+            )
         }
 
     @Test
@@ -102,6 +127,11 @@ class SearchCityWeatherUseCaseTest {
                 )("  Kyiv ")
 
             assertEquals("Kyiv", result.city)
+            assertEquals("Kyiv", result.normalizedQuery)
+            assertNull(result.coordinates)
+            assertEquals(SelectedPlace.City("Kyiv", "Kyiv"), result.toSelectedPlace())
+            assertNull(weatherRepository.lat)
+            assertNull(weatherRepository.lon)
             assertEquals("Kyiv", weatherRepository.city)
             assertNull(geocodingRepository.query)
         }
