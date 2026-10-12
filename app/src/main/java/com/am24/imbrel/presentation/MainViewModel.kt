@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
+import com.am24.imbrel.domain.error.LocationErrorReason
+import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.network.NetworkMonitor
+import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
 import com.am24.imbrel.domain.usecase.SearchCityWeatherUseCase
@@ -13,6 +16,8 @@ import com.am24.imbrel.presentation.model.WeatherModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +25,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
+// Weather and permission commands share one screen state and request generation.
+@Suppress("TooManyFunctions")
 class MainViewModel(
     private val getCurrentWeatherUseCase: GetCurrentWeatherUseCase,
     private val getCurrentLocationUseCase: GetCurrentLocationUseCase,
     private val searchCityWeatherUseCase: SearchCityWeatherUseCase,
     private val weatherPresentationMapper: WeatherPresentationMapper,
     networkMonitor: NetworkMonitor,
+    private val selectedPlaceRepository: SelectedPlaceRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
@@ -37,6 +47,10 @@ class MainViewModel(
     private val _events = Channel<WeatherUiEvent>(Channel.BUFFERED)
     val events: Flow<WeatherUiEvent> = _events.receiveAsFlow()
 
+    private val _locationRequests = Channel<LocationRequest>(Channel.BUFFERED)
+    val locationRequests: Flow<LocationRequest> = _locationRequests.receiveAsFlow()
+    private val selectionMutex = Mutex()
+    private var startupInitialized = false
     private var weatherRequestJob: Job? = null
 
     // Cancellation is cooperative, so every state mutation also checks this generation. A late
@@ -50,14 +64,70 @@ class MainViewModel(
         }
     }
 
-    fun requestCityWeather(city: String) {
-        lastRequest = Request.City(city)
+    fun initializeStartup() {
+        if (startupInitialized) return
+        startupInitialized = true
+        val startupRequestId = requestId
+        viewModelScope.launch {
+            val place =
+                try {
+                    selectedPlaceRepository.getSelectedPlace()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    // A storage failure falls back to the first-launch location flow.
+                    null
+                }
+            currentCoroutineContext().ensureActive()
+            if (requestId != startupRequestId) return@launch
+            when (place) {
+                is SelectedPlace.City -> requestCityWeather(place.normalizedQuery, place)
+                SelectedPlace.CurrentLocation, null -> requestLocation()
+            }
+        }
+    }
+
+    fun isCurrentRequest(id: Long): Boolean = id == requestId
+
+    fun requestLocation() {
+        lastRequest = Request.CurrentLocation(true, LocationErrorReason.PermissionDenied)
+        val id = beginRequest(Operation.Location)
+        _locationRequests.trySend(LocationRequest(id))
+    }
+
+    fun requestSavedLocationOrPermission(id: Long) {
+        if (!isCurrentRequest(id)) return
+        weatherRequestJob =
+            viewModelScope.launch {
+                val saved = getCurrentLocationUseCase.getSavedLocation()
+                currentCoroutineContext().ensureActive()
+                if (!isCurrentRequest(id)) return@launch
+                if (saved == null) {
+                    _locationRequests.send(LocationRequest(id, requestPermission = true))
+                } else {
+                    requestCurrentLocationWeather(allowCurrentLocation = false, expectedRequestId = id)
+                }
+            }
+    }
+
+    fun requestCityWeather(city: String) = requestCityWeather(city, restoredPlace = null)
+
+    private fun requestCityWeather(
+        city: String,
+        restoredPlace: SelectedPlace.City?,
+    ) {
+        lastRequest = Request.City(city, restoredPlace)
         val id = beginRequest(Operation.CitySearch)
         weatherRequestJob =
             viewModelScope.launch {
                 try {
-                    val result = searchCityWeatherUseCase(city)
+                    val result =
+                        if (restoredPlace == null) searchCityWeatherUseCase(city) else searchCityWeatherUseCase(restoredPlace)
                     val weather = weatherPresentationMapper(result.forecast, result.city)
+                    currentCoroutineContext().ensureActive()
+                    if (restoredPlace == null && (weather.current != null || weather.daily.isNotEmpty())) {
+                        saveSelection(id, result.toSelectedPlace())
+                    }
                     showWeather(id, weather.current, weather.daily)
                 } catch (cancellation: CancellationException) {
                     clearCancelledRequest(id)
@@ -77,14 +147,19 @@ class MainViewModel(
             }
     }
 
-    fun requestCurrentLocationWeather() {
-        lastRequest = Request.CurrentLocation
-        val id = beginRequest(Operation.Location)
+    fun requestCurrentLocationWeather(
+        allowCurrentLocation: Boolean = true,
+        expectedRequestId: Long? = null,
+        missingLocationReason: LocationErrorReason = LocationErrorReason.PermissionDenied,
+    ) {
+        if (expectedRequestId != null && !isCurrentRequest(expectedRequestId)) return
+        lastRequest = Request.CurrentLocation(allowCurrentLocation, missingLocationReason)
+        val id = expectedRequestId ?: beginRequest(Operation.Location)
         weatherRequestJob =
             viewModelScope.launch {
                 val location =
                     try {
-                        getCurrentLocationUseCase()
+                        getCurrentLocationUseCase(allowCurrentLocation, missingLocationReason)
                     } catch (cancellation: CancellationException) {
                         clearCancelledRequest(id)
                         throw cancellation
@@ -111,6 +186,10 @@ class MainViewModel(
                             location.longitude.toString(),
                         )
                     val weather = weatherPresentationMapper(response, location.placeName)
+                    currentCoroutineContext().ensureActive()
+                    if (weather.current != null || weather.daily.isNotEmpty()) {
+                        saveSelection(id, SelectedPlace.CurrentLocation)
+                    }
                     showWeather(id, weather.current, weather.daily)
                 } catch (cancellation: CancellationException) {
                     clearCancelledRequest(id)
@@ -132,9 +211,31 @@ class MainViewModel(
 
     fun retryLastRequest() {
         when (val request = lastRequest) {
-            is Request.City -> requestCityWeather(request.city)
-            Request.CurrentLocation -> requestCurrentLocationWeather()
+            is Request.City -> requestCityWeather(request.city, request.restoredPlace)
+            is Request.CurrentLocation ->
+                requestCurrentLocationWeather(
+                    allowCurrentLocation = request.allowCurrentLocation,
+                    missingLocationReason = request.missingLocationReason,
+                )
             null -> Unit
+        }
+    }
+
+    private suspend fun saveSelection(
+        id: Long,
+        place: SelectedPlace,
+    ) {
+        selectionMutex.withLock {
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentRequest(id)) return
+            try {
+                selectedPlaceRepository.saveSelectedPlace(place)
+                currentCoroutineContext().ensureActive()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Persistence is best-effort; a valid forecast remains visible.
+            }
         }
     }
 
@@ -248,8 +349,17 @@ class MainViewModel(
     private sealed interface Request {
         data class City(
             val city: String,
+            val restoredPlace: SelectedPlace.City?,
         ) : Request
 
-        data object CurrentLocation : Request
+        data class CurrentLocation(
+            val allowCurrentLocation: Boolean,
+            val missingLocationReason: LocationErrorReason,
+        ) : Request
     }
 }
+
+data class LocationRequest(
+    val id: Long,
+    val requestPermission: Boolean = false,
+)

@@ -9,10 +9,13 @@ import com.am24.imbrel.domain.model.CurrentWeather
 import com.am24.imbrel.domain.model.DailyWeather
 import com.am24.imbrel.domain.model.GeocodedLocation
 import com.am24.imbrel.domain.model.HourlyWeather
+import com.am24.imbrel.domain.model.LocationCoordinates
+import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.model.UserLocation
 import com.am24.imbrel.domain.model.WeatherForecast
 import com.am24.imbrel.domain.repository.GeocodingRepository
 import com.am24.imbrel.domain.repository.LocationRepository
+import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
 import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
@@ -816,20 +819,396 @@ class MainViewModelTest {
             assertTrue(day.currentTemperature.isEmpty())
         }
 
+    @Test
+    fun firstLaunch_initializesOnceAndRequestsLocation() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.initializeStartup()
+            viewModel.initializeStartup()
+            val request = viewModel.locationRequests.first()
+            assertFalse(request.requestPermission)
+            assertTrue(viewModel.isCurrentRequest(request.id))
+            assertEquals(1, selected.readCount)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun startupCity_withCoordinatesBypassesGeocodingAndLocation() =
+        runTest(testDispatcher) {
+            val city = SelectedPlace.City("London", "Saved London", LocationCoordinates(51.5, -0.12))
+            val selected = FakeSelectedPlaceRepository(city)
+            val weather = FakeWeatherRepository()
+            val viewModel =
+                viewModel(
+                    weather,
+                    FakeLocationRepository(currentFailure = IllegalStateException("GPS must not be used")),
+                    FakeGeocodingRepository(found = false),
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+
+            assertEquals("51.5", weather.lastLat)
+            assertEquals("-0.12", weather.lastLon)
+            assertEquals("London", weather.lastCity)
+            assertEquals(
+                "Saved London",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertEquals(1, selected.readCount)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun startupCity_withoutCoordinatesUsesNormalizedQuery() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.City("Kyiv", "Kyiv"))
+            val weather = FakeWeatherRepository()
+            val viewModel = viewModel(weather, selectedPlaceRepository = selected)
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+
+            assertEquals("Kyiv", weather.lastCity)
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+        }
+
+    @Test
+    fun startupCity_offlineUsesCityCacheWithoutGeocoding() =
+        runTest(testDispatcher) {
+            val weather = FakeWeatherRepository()
+            val viewModel =
+                viewModel(
+                    weather,
+                    geocodingRepository = FakeGeocodingRepository(found = false),
+                    networkMonitor = FakeNetworkMonitor(false),
+                    selectedPlaceRepository = FakeSelectedPlaceRepository(SelectedPlace.City("Kyiv", "Kyiv")),
+                )
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+
+            assertEquals("Kyiv", weather.lastCity)
+            assertNull(weather.lastLat)
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+        }
+
+    @Test
+    fun startupCurrentLocation_usesPermissionFlowAndPersistsAfterSuccess() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.initializeStartup()
+            val request = viewModel.locationRequests.first()
+            viewModel.requestCurrentLocationWeather(expectedRequestId = request.id)
+            advanceUntilIdle()
+
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertEquals(listOf(SelectedPlace.CurrentLocation), selected.writes)
+        }
+
+    @Test
+    fun deniedPermission_usesSavedCoordinatesWithoutNewLocation() =
+        runTest(testDispatcher) {
+            val weather = FakeWeatherRepository()
+            val viewModel =
+                viewModel(
+                    weather,
+                    FakeLocationRepository(
+                        currentFailure = IllegalStateException("GPS must not be used"),
+                        savedLocation = UserLocation(1.0, 2.0, "Saved"),
+                    ),
+                )
+            viewModel.requestLocation()
+            val request = viewModel.locationRequests.first()
+            viewModel.requestCurrentLocationWeather(allowCurrentLocation = false, expectedRequestId = request.id)
+            advanceUntilIdle()
+
+            assertEquals("1.0", weather.lastLat)
+            assertEquals(
+                "Saved",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+        }
+
+    @Test
+    fun noSavedCoordinates_requestsPermissionAndAllowsSearchAfterDenial() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.requestLocation()
+            val request = viewModel.locationRequests.first()
+            viewModel.requestSavedLocationOrPermission(request.id)
+            val permission = viewModel.locationRequests.first()
+            assertTrue(permission.requestPermission)
+            viewModel.requestCurrentLocationWeather(allowCurrentLocation = false, expectedRequestId = permission.id)
+            advanceUntilIdle()
+            assertEquals(
+                WeatherUiError.Location(DomainError.Location(LocationErrorReason.PermissionDenied)),
+                viewModel.uiState.value.error,
+            )
+            assertTrue(selected.writes.isEmpty())
+
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertTrue(selected.value is SelectedPlace.City)
+        }
+
+    @Test
+    fun startupReadFailure_fallsBackToLocation() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(read = { throw java.io.IOException("read") })
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.initializeStartup()
+
+            assertTrue(viewModel.isCurrentRequest(viewModel.locationRequests.first().id))
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun persistenceFailure_doesNotHideSuccessfulForecast() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(writeFailure = java.io.IOException("write"))
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
+
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertNull(viewModel.uiState.value.error)
+        }
+
+    @Test
+    fun failedSearch_doesNotOverwriteSelectedPlace() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository(response = { throw DomainFailureException(DomainError.Unknown) }),
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
+
+            assertSame(SelectedPlace.CurrentLocation, selected.value)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun slowStartupRead_doesNotOverrideManualCitySearch() =
+        runTest(testDispatcher) {
+            val stored = CompletableDeferred<SelectedPlace?>()
+            val selected = FakeSelectedPlaceRepository(read = { stored.await() })
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.initializeStartup()
+            runCurrent()
+            viewModel.requestCityWeather("Manual")
+            advanceUntilIdle()
+            stored.complete(SelectedPlace.City("Stored", "Stored"))
+            advanceUntilIdle()
+
+            assertEquals(
+                "Manual",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertEquals("Manual", (selected.value as SelectedPlace.City).normalizedQuery)
+        }
+
+    @Test
+    fun latePermissionResult_doesNotOverrideManualCity() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.requestLocation()
+            val request = viewModel.locationRequests.first()
+            viewModel.requestCityWeather("Manual")
+            advanceUntilIdle()
+            viewModel.requestCurrentLocationWeather(expectedRequestId = request.id)
+            advanceUntilIdle()
+
+            assertEquals(
+                "Manual",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertEquals(1, selected.writes.size)
+        }
+
+    @Test
+    fun nonCooperativeOlderRequest_cannotPersistOverNewerSelection() =
+        runTest(testDispatcher) {
+            val older = CompletableDeferred<Unit>()
+            var calls = 0
+            val weather =
+                FakeWeatherRepository {
+                    if (calls++ == 0) withContext(NonCancellable) { older.await() }
+                    successForecast()
+                }
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(weather, selectedPlaceRepository = selected)
+            viewModel.requestCityWeather("Older")
+            runCurrent()
+            viewModel.requestCityWeather("Newer")
+            runCurrent()
+            older.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(
+                "Newer",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertEquals("Newer", (selected.value as SelectedPlace.City).normalizedQuery)
+            assertEquals(1, selected.writes.size)
+        }
+
+    @Test
+    fun successfulManualSearch_persistsNormalizedQueryDisplayNameAndCoordinates() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository(),
+                    geocodingRepository = FakeGeocodingRepository(localizedName = "Localized Kyiv"),
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.requestCityWeather("  Kyiv   City ")
+            advanceUntilIdle()
+
+            assertEquals(
+                SelectedPlace.City("Kyiv City", "Localized Kyiv", LocationCoordinates(50.45, 30.52)),
+                selected.value,
+            )
+        }
+
+    @Test
+    fun offlineCurrentLocation_usesSavedLocationAndCachedForecast() =
+        runTest(testDispatcher) {
+            val weather = FakeWeatherRepository()
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel =
+                viewModel(
+                    weather,
+                    FakeLocationRepository(
+                        currentFailure = IllegalStateException("GPS must not be used"),
+                        savedLocation = UserLocation(1.0, 2.0, "Saved"),
+                    ),
+                    networkMonitor = FakeNetworkMonitor(false),
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.initializeStartup()
+            val request = viewModel.locationRequests.first()
+            viewModel.requestCurrentLocationWeather(expectedRequestId = request.id)
+            advanceUntilIdle()
+
+            assertEquals("1.0", weather.lastLat)
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+        }
+
+    @Test
+    fun cancelledSearch_doesNotPersistSelection() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository { throw CancellationException("cancel") },
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
+
+            assertSame(SelectedPlace.CurrentLocation, selected.value)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun failedLocationForecast_doesNotReplaceSelectedCity() =
+        runTest(testDispatcher) {
+            val city = SelectedPlace.City("Kyiv", "Kyiv")
+            val selected = FakeSelectedPlaceRepository(city)
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository { throw DomainFailureException(DomainError.Unknown) },
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.requestCurrentLocationWeather()
+            advanceUntilIdle()
+
+            assertEquals(city, selected.value)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun supersededSearch_doesNotPersistWhenNewerSearchFails() =
+        runTest(testDispatcher) {
+            val older = CompletableDeferred<Unit>()
+            var calls = 0
+            val weather =
+                FakeWeatherRepository {
+                    if (calls++ == 0) {
+                        withContext(NonCancellable) { older.await() }
+                        successForecast()
+                    } else {
+                        throw DomainFailureException(DomainError.Unknown)
+                    }
+                }
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel = viewModel(weather, selectedPlaceRepository = selected)
+            viewModel.requestCityWeather("Older")
+            runCurrent()
+            viewModel.requestCityWeather("Newer")
+            runCurrent()
+            older.complete(Unit)
+            advanceUntilIdle()
+
+            assertSame(SelectedPlace.CurrentLocation, selected.value)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    private class FakeSelectedPlaceRepository(
+        var value: SelectedPlace? = null,
+        private val read: (suspend () -> SelectedPlace?)? = null,
+        private val writeFailure: Exception? = null,
+    ) : SelectedPlaceRepository {
+        var readCount = 0
+        val writes = mutableListOf<SelectedPlace>()
+
+        override suspend fun getSelectedPlace(): SelectedPlace? {
+            readCount++
+            return read?.invoke() ?: value
+        }
+
+        override suspend fun saveSelectedPlace(place: SelectedPlace) {
+            writeFailure?.let { throw it }
+            writes.add(place)
+            value = place
+        }
+
+        override suspend fun clearSelectedPlace() {
+            value = null
+        }
+    }
+
     private fun viewModel(
         repository: WeatherRepository,
         locationRepository: LocationRepository = FakeLocationRepository(),
         geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
         networkMonitor: FakeNetworkMonitor = FakeNetworkMonitor(),
+        selectedPlaceRepository: SelectedPlaceRepository = FakeSelectedPlaceRepository(),
     ) = MainViewModel(
         GetCurrentWeatherUseCase(repository),
-        GetCurrentLocationUseCase(locationRepository),
-        SearchCityWeatherUseCase(repository, geocodingRepository),
+        GetCurrentLocationUseCase(locationRepository, networkMonitor),
+        SearchCityWeatherUseCase(repository, geocodingRepository, networkMonitor),
         WeatherPresentationMapper(
             conditionLocalizer = { _, fallback -> fallback },
             clock = Clock.fixed(Instant.parse("2026-07-05T12:34:00Z"), ZoneOffset.UTC),
         ),
         networkMonitor,
+        selectedPlaceRepository,
     )
 
     private class FakeLocationRepository(

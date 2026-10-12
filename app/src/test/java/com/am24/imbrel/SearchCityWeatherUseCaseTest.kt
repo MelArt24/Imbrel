@@ -195,6 +195,21 @@ class SearchCityWeatherUseCaseTest {
             assertSame(error, (failure as DomainFailureException).error)
         }
 
+    @Test
+    fun restoredCoordinates_useWeatherRepositoryWithoutGeocodingEvenOffline() =
+        runTest {
+            val weather = FakeWeatherRepository()
+            val geocoding = FakeGeocodingRepository(null)
+            val city = SelectedPlace.City("Kyiv", "Saved name", LocationCoordinates(50.45, 30.52))
+            val result = SearchCityWeatherUseCase(weather, geocoding, FakeNetworkMonitor(false))(city)
+
+            assertEquals("50.45", weather.lat)
+            assertEquals("30.52", weather.lon)
+            assertEquals("Kyiv", weather.city)
+            assertNull(geocoding.query)
+            assertEquals(city, result.toSelectedPlace())
+        }
+
     private suspend fun captureFailure(block: suspend () -> Unit): Throwable? =
         try {
             block()

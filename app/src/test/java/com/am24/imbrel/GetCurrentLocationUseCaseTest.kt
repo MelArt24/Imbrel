@@ -2,6 +2,7 @@ package com.am24.imbrel
 
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
+import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.domain.error.NetworkErrorReason
 import com.am24.imbrel.domain.model.UserLocation
 import com.am24.imbrel.domain.repository.LocationRepository
@@ -9,6 +10,7 @@ import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -149,6 +151,29 @@ class GetCurrentLocationUseCaseTest {
             val repository = FakeLocationRepository(current = current, saveFailure = cancellation)
 
             assertSame(cancellation, captureFailure { GetCurrentLocationUseCase(repository)() })
+        }
+
+    @Test
+    fun savedOnly_doesNotAcquireNewLocation() =
+        runTest {
+            val repository = FakeLocationRepository(lastSaved = current)
+
+            assertEquals(current, GetCurrentLocationUseCase(repository)(allowCurrentLocation = false))
+            assertEquals(0, repository.currentReadCount)
+            assertNull(repository.savedByUseCase)
+        }
+
+    @Test
+    fun savedOnly_withoutSavedLocationReportsPermissionDenied() =
+        runTest {
+            val repository = FakeLocationRepository()
+            val failure = captureFailure { GetCurrentLocationUseCase(repository)(allowCurrentLocation = false) }
+
+            assertEquals(
+                DomainError.Location(LocationErrorReason.PermissionDenied),
+                (failure as DomainFailureException).error,
+            )
+            assertEquals(0, repository.currentReadCount)
         }
 
     private suspend fun captureFailure(block: suspend () -> Unit): Throwable? =

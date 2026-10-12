@@ -88,6 +88,7 @@ val appModule =
                 getCurrentWeatherUseCase = get(),
                 getCurrentLocationUseCase = get(),
                 searchCityWeatherUseCase = get(),
+                selectedPlaceRepository = get(),
                 weatherPresentationMapper = get(),
                 networkMonitor = get(),
             )

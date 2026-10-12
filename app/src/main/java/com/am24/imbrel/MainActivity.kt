@@ -13,8 +13,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.presentation.DialogManager
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.WeatherApp
@@ -30,32 +37,45 @@ class MainActivity : ComponentActivity() {
         val viewModel: MainViewModel by viewModel()
         setContent {
             val context = LocalContext.current
+            var permissionRequestId by rememberSaveable { mutableLongStateOf(-1L) }
             val locationPermissionLauncher =
                 rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions(),
                 ) { permissions ->
-                    if (permissions.values.any { it }) {
-                        checkLocation(viewModel)
-                    } else {
-                        Toast.makeText(context, getString(R.string.location_permission_denied), Toast.LENGTH_SHORT).show()
+                    val id = permissionRequestId
+                    if (viewModel.isCurrentRequest(id)) {
+                        if (permissions.values.any { it }) {
+                            checkLocation(viewModel, id)
+                        } else {
+                            viewModel.requestCurrentLocationWeather(allowCurrentLocation = false, expectedRequestId = id)
+                            Toast.makeText(context, getString(R.string.location_permission_denied), Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
 
-            val requestLocation = {
-                if (hasLocationPermission()) {
-                    checkLocation(viewModel)
-                } else {
-                    locationPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                        ),
-                    )
-                }
-            }
+            val requestLocation = { viewModel.requestLocation() }
 
-            LaunchedEffect(Unit) {
-                requestLocation()
+            LaunchedEffect(viewModel) {
+                viewModel.initializeStartup()
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    viewModel.locationRequests.collect { request ->
+                        if (viewModel.isCurrentRequest(request.id)) {
+                            when {
+                                hasLocationPermission() -> checkLocation(viewModel, request.id)
+                                request.requestPermission -> {
+                                    permissionRequestId = request.id
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                        ),
+                                    )
+                                }
+                                else -> viewModel.requestSavedLocationOrPermission(request.id)
+                            }
+                        }
+                    }
+                }
             }
 
             WeatherForecastAppTheme {
@@ -64,10 +84,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkLocation(viewModel: MainViewModel) {
-        if (isLocationEnabled()) {
-            viewModel.requestCurrentLocationWeather()
+    private fun checkLocation(
+        viewModel: MainViewModel,
+        requestId: Long,
+    ) {
+        if (!viewModel.isCurrentRequest(requestId)) return
+        if (!viewModel.isOnline.value) {
+            viewModel.requestCurrentLocationWeather(expectedRequestId = requestId)
+        } else if (isLocationEnabled()) {
+            viewModel.requestCurrentLocationWeather(expectedRequestId = requestId)
         } else {
+            viewModel.requestCurrentLocationWeather(
+                allowCurrentLocation = false,
+                expectedRequestId = requestId,
+                missingLocationReason = LocationErrorReason.Unavailable,
+            )
             DialogManager.locationSettingsDialog(
                 this,
                 object : DialogManager.Listener {

@@ -2,6 +2,7 @@ package com.am24.imbrel.domain.usecase
 
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
+import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.domain.error.NetworkErrorReason
 import com.am24.imbrel.domain.model.UserLocation
 import com.am24.imbrel.domain.network.NetworkMonitor
@@ -27,9 +28,16 @@ class GetCurrentLocationUseCase(
      * an acquisition failure is rethrown unchanged. Saving a newly acquired location is
      * best-effort; cancellation is always propagated.
      */
-    suspend operator fun invoke(): UserLocation {
+    suspend operator fun invoke(
+        allowCurrentLocation: Boolean = true,
+        missingLocationReason: LocationErrorReason = LocationErrorReason.PermissionDenied,
+    ): UserLocation {
+        if (!allowCurrentLocation) {
+            return getSavedLocation() ?: throw DomainFailureException(DomainError.Location(missingLocationReason))
+        }
+
         if (!networkMonitor.isOnlineOrDomainFailure()) {
-            return loadSavedLocation() ?: throw DomainFailureException(
+            return getSavedLocation() ?: throw DomainFailureException(
                 DomainError.Network(NetworkErrorReason.Offline),
             )
         }
@@ -43,7 +51,7 @@ class GetCurrentLocationUseCase(
                 @Suppress("TooGenericExceptionCaught")
                 locationFailure: Exception,
             ) {
-                val savedLocation = loadSavedLocation()
+                val savedLocation = getSavedLocation()
                 return savedLocation ?: throw locationFailure
             }
         try {
@@ -56,7 +64,7 @@ class GetCurrentLocationUseCase(
         return currentLocation
     }
 
-    private suspend fun loadSavedLocation(): UserLocation? =
+    suspend fun getSavedLocation(): UserLocation? =
         try {
             locationRepository.getLastSavedLocation()
         } catch (cancellation: CancellationException) {

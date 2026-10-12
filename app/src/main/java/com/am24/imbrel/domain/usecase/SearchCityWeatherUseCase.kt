@@ -23,6 +23,21 @@ class SearchCityWeatherUseCase(
             override fun observeConnectivity(): Flow<Boolean> = flowOf(true)
         },
 ) {
+    suspend operator fun invoke(place: SelectedPlace.City): CityWeatherResult {
+        val coordinates = place.coordinates ?: return invoke(place.normalizedQuery)
+        return CityWeatherResult(
+            forecast =
+                weatherRepository.getWeatherData(
+                    lat = coordinates.latitude.toString(),
+                    lon = coordinates.longitude.toString(),
+                    city = place.normalizedQuery,
+                ),
+            city = place.displayName,
+            normalizedQuery = place.normalizedQuery,
+            coordinates = coordinates,
+        )
+    }
+
     suspend operator fun invoke(city: String): CityWeatherResult {
         val normalizedQuery = SelectedPlace.City.normalizeQuery(city)
         if (normalizedQuery.isEmpty()) {
