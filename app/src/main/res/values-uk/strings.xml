@@ -50,4 +50,5 @@
     <string name="weather_freezing_rain">Крижаний дощ</string>
     <string name="weather_hail">Град</string>
     <string name="weather_thunderstorm">Гроза</string>
+    <string name="city_query_required">Введіть назву міста</string>
 </resources>

@@ -50,4 +50,5 @@
     <string name="weather_freezing_rain">Freezing rain</string>
     <string name="weather_hail">Hail</string>
     <string name="weather_thunderstorm">Thunderstorm</string>
+    <string name="city_query_required">Enter a city name</string>
 </resources>

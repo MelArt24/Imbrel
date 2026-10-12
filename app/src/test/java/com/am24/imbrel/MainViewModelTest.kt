@@ -43,6 +43,7 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -1167,6 +1168,251 @@ class MainViewModelTest {
 
             assertSame(SelectedPlace.CurrentLocation, selected.value)
             assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun manualRequestBeforeStartup_isNotReplacedByStoredSelection() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.City("Stored", "Stored"))
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.requestCityWeather("Manual")
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("Manual", state.currentWeather?.city)
+            assertEquals(0, selected.readCount)
+        }
+
+    @Test
+    fun searchScreen_blankQueryDoesNotStartRequest() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("  ")
+            viewModel.submitCitySearch()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.citySearchState.value.isQueryBlank)
+            assertFalse(viewModel.citySearchState.value.isLoading)
+            assertEquals(WeatherUiStatus.Initial, viewModel.uiState.value.status)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun searchScreen_existingForecastIsNotSearchSuccess() =
+        runTest(testDispatcher) {
+            val viewModel = viewModel(FakeWeatherRepository())
+            viewModel.requestCityWeather("Existing")
+            advanceUntilIdle()
+            viewModel.openCitySearch()
+
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertNull(viewModel.citySearchState.value.successId)
+        }
+
+    @Test
+    fun searchScreen_successIsRetainedUntilAcknowledgedExactlyOnce() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected)
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("  Kyiv ")
+            viewModel.submitCitySearch()
+            advanceUntilIdle()
+
+            val id = requireNotNull(viewModel.citySearchState.value.successId)
+            assertEquals(
+                "Kyiv",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertTrue(selected.value is SelectedPlace.City)
+            assertFalse(viewModel.consumeCitySearchSuccess(id + 1))
+            assertTrue(viewModel.consumeCitySearchSuccess(id))
+            assertFalse(viewModel.consumeCitySearchSuccess(id))
+            viewModel.openCitySearch()
+            assertNull(viewModel.citySearchState.value.successId)
+        }
+
+    @Test
+    fun searchScreen_errorIsLocalAndCanBeRetriedWithoutOldSuccess() =
+        runTest(testDispatcher) {
+            var calls = 0
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (calls++ == 1) throw DomainFailureException(DomainError.Api(ApiErrorReason.NotFound))
+                        successForecast()
+                    },
+                )
+            viewModel.requestCityWeather("Existing")
+            advanceUntilIdle()
+            val previous = viewModel.uiState.value
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Unknown")
+            viewModel.submitCitySearch()
+            advanceUntilIdle()
+
+            assertEquals(previous, viewModel.uiState.value)
+            assertEquals(
+                WeatherUiError.CitySearch(DomainError.Api(ApiErrorReason.NotFound)),
+                viewModel.citySearchState.value.error,
+            )
+            assertNull(viewModel.citySearchState.value.successId)
+            viewModel.updateCitySearchQuery("Kyiv")
+            viewModel.submitCitySearch()
+            advanceUntilIdle()
+            assertNotNull(viewModel.citySearchState.value.successId)
+        }
+
+    @Test
+    fun searchScreen_backCancelsNonCooperativeRequestAndPreservesSelection() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<Unit>()
+            var calls = 0
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (calls++ > 0) withContext(NonCancellable) { pending.await() }
+                        successForecast()
+                    },
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.requestCityWeather("Existing")
+            advanceUntilIdle()
+            val previous = viewModel.uiState.value
+            val previousPlace = selected.value
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Late city")
+            viewModel.submitCitySearch()
+            runCurrent()
+            viewModel.closeCitySearch()
+            pending.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(previous, viewModel.uiState.value)
+            assertEquals(previousPlace, selected.value)
+            assertEquals(1, selected.writes.size)
+            assertNull(viewModel.citySearchState.value.successId)
+        }
+
+    @Test
+    fun searchScreen_duplicateSubmitStartsOnlyOneRequest() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<WeatherForecast>()
+            var calls = 0
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        calls++
+                        pending.await()
+                    },
+                )
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Kyiv")
+            viewModel.submitCitySearch()
+            viewModel.submitCitySearch()
+            runCurrent()
+            assertEquals(1, calls)
+            pending.complete(successForecast())
+            advanceUntilIdle()
+        }
+
+    @Test
+    fun searchScreen_emptyForecastReportsErrorWithoutPersistingOrNavigating() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository { emptyForecast() }, selectedPlaceRepository = selected)
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Kyiv")
+            viewModel.submitCitySearch()
+            advanceUntilIdle()
+
+            assertNull(viewModel.citySearchState.value.successId)
+            assertNotNull(viewModel.citySearchState.value.error)
+            assertTrue(selected.writes.isEmpty())
+        }
+
+    @Test
+    fun searchScreen_backPreservesMainScreenRetryTarget() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<WeatherForecast>()
+            var calls = 0
+            val repository =
+                FakeWeatherRepository {
+                    when (calls++) {
+                        0 -> throw DomainFailureException(DomainError.Unknown)
+                        1 -> pending.await()
+                        else -> successForecast()
+                    }
+                }
+            val viewModel = viewModel(repository)
+            viewModel.requestCityWeather("Original")
+            advanceUntilIdle()
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Cancelled")
+            viewModel.submitCitySearch()
+            runCurrent()
+            viewModel.closeCitySearch()
+            viewModel.retryLastRequest()
+            advanceUntilIdle()
+
+            assertEquals("Original", repository.lastCity)
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+        }
+
+    @Test
+    fun immediateDialogSubmit_runsInBackgroundAndPublishesForecast() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<WeatherForecast>()
+            val selected = FakeSelectedPlaceRepository()
+            val viewModel = viewModel(FakeWeatherRepository { pending.await() }, selectedPlaceRepository = selected)
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Kyiv")
+
+            assertTrue(viewModel.submitCitySearch(closeOnSubmit = true))
+            assertTrue(viewModel.uiState.value.isCitySearchLoading)
+            assertFalse(viewModel.citySearchState.value.isLoading)
+            assertEquals("", viewModel.citySearchState.value.query)
+            pending.complete(successForecast())
+            advanceUntilIdle()
+
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertTrue(selected.value is SelectedPlace.City)
+            assertFalse(viewModel.uiState.value.isCitySearchLoading)
+        }
+
+    @Test
+    fun immediateDialogSubmit_blankQueryKeepsDialogAndDoesNotLoad() =
+        runTest(testDispatcher) {
+            val viewModel = viewModel(FakeWeatherRepository())
+            viewModel.openCitySearch()
+            assertFalse(viewModel.submitCitySearch(closeOnSubmit = true))
+
+            assertTrue(viewModel.citySearchState.value.isQueryBlank)
+            assertFalse(viewModel.uiState.value.isCitySearchLoading)
+        }
+
+    @Test
+    fun immediateDialogSubmit_failureIsReportedOnMain() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository { throw DomainFailureException(DomainError.Api(ApiErrorReason.NotFound)) },
+                    selectedPlaceRepository = selected,
+                )
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Unknown")
+            viewModel.submitCitySearch(closeOnSubmit = true)
+            advanceUntilIdle()
+
+            assertEquals(WeatherUiStatus.Error, viewModel.uiState.value.status)
+            assertFalse(viewModel.uiState.value.isCitySearchLoading)
+            assertSame(SelectedPlace.CurrentLocation, selected.value)
         }
 
     private class FakeSelectedPlaceRepository(

@@ -63,7 +63,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.am24.imbrel.R
-import com.am24.imbrel.presentation.DialogManager
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.WeatherIconHelper
 import com.am24.imbrel.presentation.WeatherUiError
@@ -82,21 +81,11 @@ import kotlinx.coroutines.launch
 fun MainScreen(
     viewModel: MainViewModel,
     onLocationRequest: () -> Unit,
+    onSearchClick: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val openCitySearch = {
-        DialogManager.citySearchDialog(
-            context,
-            object : DialogManager.Listener {
-                override fun onClick(name: String?) {
-                    name?.let { viewModel.requestCityWeather(city = it) }
-                }
-            },
-        )
-    }
-
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
@@ -116,7 +105,7 @@ fun MainScreen(
         uiState = uiState,
         isOnline = isOnline,
         onRetry = viewModel::retryLastRequest,
-        onSearchClick = openCitySearch,
+        onSearchClick = onSearchClick,
         onLocationClick = onLocationRequest,
     )
 }
@@ -189,7 +178,7 @@ fun MainScreenContent(
                             )
                         }
 
-                        if (uiState.isRefreshing) {
+                        if (uiState.isRefreshing || uiState.isCitySearchLoading) {
                             WeatherRefreshOverlay()
                         }
                     }

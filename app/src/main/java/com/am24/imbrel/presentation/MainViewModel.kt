@@ -2,9 +2,11 @@ package com.am24.imbrel.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.am24.imbrel.domain.error.ApiErrorReason
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.error.LocationErrorReason
+import com.am24.imbrel.domain.model.CityWeatherResult
 import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.repository.SelectedPlaceRepository
@@ -41,6 +43,11 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
+    private val _citySearchState = MutableStateFlow(CitySearchUiState())
+    val citySearchState: StateFlow<CitySearchUiState> = _citySearchState.asStateFlow()
+    private var weatherBeforeCitySearch: WeatherUiState? = null
+    private var requestBeforeCitySearch: Request? = null
+
     private val _isOnline = MutableStateFlow(networkMonitor.isOnline())
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
@@ -67,6 +74,7 @@ class MainViewModel(
     fun initializeStartup() {
         if (startupInitialized) return
         startupInitialized = true
+        if (requestId != 0L) return
         val startupRequestId = requestId
         viewModelScope.launch {
             val place =
@@ -110,41 +118,139 @@ class MainViewModel(
             }
     }
 
+    fun openCitySearch() {
+        _citySearchState.value = CitySearchUiState()
+    }
+
+    fun updateCitySearchQuery(query: String) {
+        if (_citySearchState.value.isLoading) return
+        _citySearchState.update { it.copy(query = query, isQueryBlank = false, error = null) }
+    }
+
+    fun submitCitySearch(closeOnSubmit: Boolean = false): Boolean {
+        val state = _citySearchState.value
+        if (state.isLoading || state.successId != null) return false
+        return if (state.query.isBlank()) {
+            _citySearchState.update { it.copy(isQueryBlank = true, error = null) }
+            false
+        } else {
+            if (closeOnSubmit) {
+                closeCitySearch()
+                requestCityWeather(state.query)
+            } else {
+                weatherBeforeCitySearch = _uiState.value
+                requestBeforeCitySearch = lastRequest
+                requestCityWeather(state.query, restoredPlace = null, fromSearchScreen = true)
+            }
+            true
+        }
+    }
+
+    fun closeCitySearch() {
+        val state = _citySearchState.value
+        if (state.isLoading && state.requestId == requestId) {
+            weatherRequestJob?.cancel()
+            restoreWeatherBeforeSearch()
+            ++requestId
+        }
+        _citySearchState.value = CitySearchUiState()
+        weatherBeforeCitySearch = null
+        requestBeforeCitySearch = null
+    }
+
+    fun consumeCitySearchSuccess(id: Long): Boolean {
+        if (_citySearchState.value.successId != id || !isCurrentRequest(id)) return false
+        closeCitySearch()
+        return true
+    }
+
+    private fun restoreWeatherBeforeSearch() {
+        lastRequest = requestBeforeCitySearch
+        weatherBeforeCitySearch?.let { previous ->
+            _uiState.value =
+                previous.copy(
+                    status = if (previous.status == WeatherUiStatus.Loading) WeatherUiStatus.Initial else previous.status,
+                    isRefreshing = false,
+                    isCitySearchLoading = false,
+                    isLocationLoading = false,
+                    isWeatherLoading = false,
+                )
+        }
+    }
+
     fun requestCityWeather(city: String) = requestCityWeather(city, restoredPlace = null)
 
     private fun requestCityWeather(
         city: String,
         restoredPlace: SelectedPlace.City?,
+        fromSearchScreen: Boolean = false,
     ) {
         lastRequest = Request.City(city, restoredPlace)
         val id = beginRequest(Operation.CitySearch)
+        if (fromSearchScreen) {
+            _citySearchState.update { it.copy(isLoading = true, isQueryBlank = false, error = null, requestId = id, successId = null) }
+        }
         weatherRequestJob =
             viewModelScope.launch {
                 try {
                     val result =
                         if (restoredPlace == null) searchCityWeatherUseCase(city) else searchCityWeatherUseCase(restoredPlace)
-                    val weather = weatherPresentationMapper(result.forecast, result.city)
-                    currentCoroutineContext().ensureActive()
-                    if (restoredPlace == null && (weather.current != null || weather.daily.isNotEmpty())) {
-                        saveSelection(id, result.toSelectedPlace())
-                    }
-                    showWeather(id, weather.current, weather.daily)
+                    completeCitySearch(id, result, persistSelection = restoredPlace == null, fromSearchScreen = fromSearchScreen)
                 } catch (cancellation: CancellationException) {
                     clearCancelledRequest(id)
                     throw cancellation
                 } catch (failure: DomainFailureException) {
-                    showError(id, WeatherUiError.CitySearch(failure.error))
+                    showCitySearchError(id, WeatherUiError.CitySearch(failure.error), fromSearchScreen)
                 } catch (
                     @Suppress("TooGenericExceptionCaught", "SwallowedException")
                     e: Exception,
                 ) {
                     // The presentation boundary keeps unexpected failures from escaping without a
                     // user-visible state; known domain failures are handled above.
-                    showError(id, WeatherUiError.CitySearch(DomainError.Unknown))
+                    showCitySearchError(id, WeatherUiError.CitySearch(DomainError.Unknown), fromSearchScreen)
                 } finally {
+                    if (fromSearchScreen && isCurrentRequest(id)) {
+                        _citySearchState.update { it.copy(isLoading = false) }
+                    }
                     finishRequest(id)
                 }
             }
+    }
+
+    private suspend fun completeCitySearch(
+        id: Long,
+        result: CityWeatherResult,
+        persistSelection: Boolean,
+        fromSearchScreen: Boolean,
+    ) {
+        val weather = weatherPresentationMapper(result.forecast, result.city)
+        currentCoroutineContext().ensureActive()
+        if (!isCurrentRequest(id)) return
+        val hasForecast = weather.current != null || weather.daily.isNotEmpty()
+        if (fromSearchScreen && !hasForecast) {
+            throw DomainFailureException(DomainError.Api(ApiErrorReason.NotFound))
+        }
+        if (persistSelection && hasForecast) {
+            saveSelection(id, result.toSelectedPlace())
+        }
+        showWeather(id, weather.current, weather.daily)
+        if (fromSearchScreen && isCurrentRequest(id)) {
+            _citySearchState.update { it.copy(isLoading = false, successId = id) }
+        }
+    }
+
+    private suspend fun showCitySearchError(
+        id: Long,
+        error: WeatherUiError.CitySearch,
+        fromSearchScreen: Boolean,
+    ) {
+        if (!isCurrentRequest(id)) return
+        if (fromSearchScreen) {
+            restoreWeatherBeforeSearch()
+            _citySearchState.update { it.copy(isLoading = false, error = error) }
+        } else {
+            showError(id, error)
+        }
     }
 
     fun requestCurrentLocationWeather(
@@ -241,6 +347,9 @@ class MainViewModel(
 
     private fun beginRequest(operation: Operation): Long {
         weatherRequestJob?.cancel()
+        if (_citySearchState.value.requestId != null) {
+            _citySearchState.update { it.copy(isLoading = false, requestId = null, successId = null) }
+        }
         val id = ++requestId
         _uiState.update { state ->
             state.copy(
