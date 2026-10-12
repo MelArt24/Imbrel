@@ -50,10 +50,6 @@ class MainViewModel(
         }
     }
 
-    fun setSelectedDay(item: WeatherModel) {
-        _uiState.update { it.copy(selectedDay = item) }
-    }
-
     fun requestCityWeather(city: String) {
         lastRequest = Request.City(city)
         val id = beginRequest(Operation.CitySearch)
@@ -182,7 +178,6 @@ class MainViewModel(
                 status = status,
                 currentWeather = current,
                 dailyWeather = daily,
-                selectedDay = null,
                 error = null,
                 isRefreshing = false,
                 isCitySearchLoading = false,

@@ -11,7 +11,6 @@ data class WeatherUiState(
     val status: WeatherUiStatus = WeatherUiStatus.Initial,
     val currentWeather: WeatherModel? = null,
     val dailyWeather: List<WeatherModel> = emptyList(),
-    val selectedDay: WeatherModel? = null,
     val error: WeatherUiError? = null,
     val isRefreshing: Boolean = false,
     val isCitySearchLoading: Boolean = false,
@@ -23,9 +22,6 @@ data class WeatherUiState(
 
     val hasWeather: Boolean
         get() = currentWeather != null || dailyWeather.isNotEmpty()
-
-    val displayedWeather: WeatherModel?
-        get() = selectedDay ?: currentWeather
 }
 
 enum class WeatherUiStatus {

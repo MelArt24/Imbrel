@@ -1,5 +1,6 @@
 package com.am24.imbrel
 
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -94,6 +95,38 @@ class MainScreenTest {
         composeRule.onNodeWithText("No daily forecast available").assertIsDisplayed()
     }
 
+    @Test
+    fun daysTab_isNonInteractiveAndPreservesCurrentWeatherAndHours() {
+        val currentHour = weather("Kyiv").copy(time = "12:00", condition = "Current hour")
+        val futureHour = weather("Kyiv").copy(time = "15:00", condition = "Future hour")
+        showScreen(
+            isOnline = true,
+            uiState =
+                WeatherUiState(
+                    status = WeatherUiStatus.Success,
+                    currentWeather = weather("Kyiv").copy(hourlyWeather = listOf(currentHour)),
+                    dailyWeather =
+                        listOf(
+                            weather("Kyiv").copy(
+                                time = "2026-10-13",
+                                condition = "Tomorrow forecast",
+                                currentTemperature = "30",
+                                hourlyWeather = listOf(futureHour),
+                            ),
+                        ),
+                ),
+        )
+
+        composeRule.onNodeWithText("Current hour").assertIsDisplayed()
+        composeRule.onNodeWithText("DAYS").performClick()
+        composeRule.onNodeWithText("Tomorrow forecast").assertIsDisplayed().assertHasNoClickAction()
+        composeRule.onNodeWithText("20").assertIsDisplayed()
+        composeRule.onNodeWithText("Now").assertIsDisplayed()
+        composeRule.onNodeWithText("HOURS").performClick()
+        composeRule.onNodeWithText("Current hour").assertIsDisplayed()
+        composeRule.onNodeWithText("Future hour").assertDoesNotExist()
+    }
+
     private fun showScreen(
         isOnline: Boolean,
         uiState: WeatherUiState = WeatherUiState(),
@@ -106,7 +139,6 @@ class MainScreenTest {
                     onRetry = {},
                     onSearchClick = {},
                     onLocationClick = {},
-                    onDayClick = {},
                 )
             }
         }

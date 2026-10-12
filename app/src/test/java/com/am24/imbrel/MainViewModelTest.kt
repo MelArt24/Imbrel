@@ -23,7 +23,6 @@ import com.am24.imbrel.presentation.WeatherUiEvent
 import com.am24.imbrel.presentation.WeatherUiState
 import com.am24.imbrel.presentation.WeatherUiStatus
 import com.am24.imbrel.presentation.mapper.WeatherPresentationMapper
-import com.am24.imbrel.presentation.model.WeatherModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -148,7 +147,6 @@ class MainViewModelTest {
                 assertFalse(isLoading)
                 assertEquals("Kyiv", currentWeather?.city)
                 assertEquals(1, dailyWeather.size)
-                assertNull(selectedDay)
             }
             assertEquals("50.45", repository.lastLat)
             assertEquals("30.52", repository.lastLon)
@@ -799,16 +797,24 @@ class MainViewModelTest {
         }
 
     @Test
-    fun selectedDay_updatesOnlySelection() {
-        val viewModel = viewModel(FakeWeatherRepository())
-        val selected = weatherModel("Tomorrow")
+    fun cityForecast_keepsCurrentWeatherAndHourlyForecastSeparateFromDays() =
+        runTest(testDispatcher) {
+            val forecast = successForecast()
+            val viewModel = viewModel(FakeWeatherRepository(response = { forecast }))
 
-        viewModel.setSelectedDay(selected)
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
 
-        assertSame(selected, viewModel.uiState.value.selectedDay)
-        assertSame(selected, viewModel.uiState.value.displayedWeather)
-        assertEquals(WeatherUiStatus.Initial, viewModel.uiState.value.status)
-    }
+            val state = viewModel.uiState.value
+            assertEquals("21\u00B0C", state.currentWeather?.currentTemperature)
+            assertEquals("12:34", state.currentWeather?.time)
+            val currentHour = state.currentWeather?.hourlyWeather?.single()
+            val day = state.dailyWeather.single()
+            assertEquals("12:00", currentHour?.time)
+            assertEquals("21\u00B0C", currentHour?.currentTemperature)
+            assertEquals("2026-07-05", day.time)
+            assertTrue(day.currentTemperature.isEmpty())
+        }
 
     private fun viewModel(
         repository: WeatherRepository,
@@ -891,18 +897,6 @@ class MainViewModelTest {
                 current = CurrentWeather("Clear", 21.4, 1),
                 hourly = emptyList(),
                 daily = emptyList(),
-            )
-
-        private fun weatherModel(time: String) =
-            WeatherModel(
-                city = "Kyiv",
-                time = time,
-                condition = "Clear",
-                currentTemperature = "21\u00B0C",
-                minimumTemperature = "18",
-                maximumTemperature = "24",
-                imageURL = "1",
-                hourlyWeather = emptyList(),
             )
     }
 }

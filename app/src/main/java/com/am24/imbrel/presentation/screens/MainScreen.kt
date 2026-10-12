@@ -9,7 +9,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -119,7 +118,6 @@ fun MainScreen(
         onRetry = viewModel::retryLastRequest,
         onSearchClick = openCitySearch,
         onLocationClick = onLocationRequest,
-        onDayClick = viewModel::setSelectedDay,
     )
 }
 
@@ -130,7 +128,6 @@ fun MainScreenContent(
     onRetry: () -> Unit,
     onSearchClick: () -> Unit,
     onLocationClick: () -> Unit,
-    onDayClick: (WeatherModel) -> Unit,
 ) {
     Box(
         modifier =
@@ -178,7 +175,7 @@ fun MainScreenContent(
                                     .padding(10.dp),
                         ) {
                             MainCard(
-                                weather = uiState.displayedWeather,
+                                weather = uiState.currentWeather,
                                 onSyncClick = onLocationClick,
                                 onSearchClick = onSearchClick,
                             )
@@ -186,10 +183,9 @@ fun MainScreenContent(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             WeatherTabs(
-                                displayedWeather = uiState.displayedWeather,
+                                currentWeather = uiState.currentWeather,
                                 dailyWeather = uiState.dailyWeather,
                                 isLoading = uiState.isLoading && !uiState.hasWeather,
-                                onDayClick = onDayClick,
                             )
                         }
 
@@ -402,10 +398,9 @@ fun MainCard(
 
 @Composable
 fun WeatherTabs(
-    displayedWeather: WeatherModel?,
+    currentWeather: WeatherModel?,
     dailyWeather: List<WeatherModel>,
     isLoading: Boolean,
-    onDayClick: (WeatherModel) -> Unit,
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
@@ -436,8 +431,8 @@ fun WeatherTabs(
             modifier = Modifier.fillMaxWidth(),
         ) { page ->
             when (page) {
-                0 -> HoursList(displayedWeather, isLoading)
-                1 -> DaysList(dailyWeather, isLoading, onDayClick)
+                0 -> HoursList(currentWeather, isLoading)
+                1 -> DaysList(dailyWeather, isLoading)
             }
         }
     }
@@ -467,7 +462,7 @@ fun HoursList(
             contentPadding = PaddingValues(bottom = 8.dp, top = 4.dp),
         ) {
             items(hours) { item ->
-                WeatherListItem(item, onClick = {})
+                WeatherListItem(item)
             }
         }
     }
@@ -477,7 +472,6 @@ fun HoursList(
 fun DaysList(
     days: List<WeatherModel>,
     isLoading: Boolean,
-    onDayClick: (WeatherModel) -> Unit,
 ) {
     val locale = LocalConfiguration.current.locales[0]
     if (days.isEmpty() && !isLoading) {
@@ -499,7 +493,6 @@ fun DaysList(
             items(days) { item ->
                 WeatherListItem(
                     item = item,
-                    onClick = { onDayClick(item) },
                     timeLabel = formatDailyForecastDate(item.time, locale),
                 )
             }
@@ -510,15 +503,13 @@ fun DaysList(
 @Composable
 fun WeatherListItem(
     item: WeatherModel,
-    onClick: () -> Unit,
     timeLabel: String = item.time,
 ) {
     Card(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .clickable { onClick() },
+                .padding(vertical = 4.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = Color.White.copy(alpha = 0.8f),
