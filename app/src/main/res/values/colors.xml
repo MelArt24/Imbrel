@@ -5,4 +5,8 @@
     <color name="blue_bg">#8F02A5EB</color>
     <color name="blue">#31B8F4</color>
     <color name="blue_bg_legacy">#6603A9F4</color>
+    <color name="navigation_selected">#FF214F78</color>
+    <color name="navigation_indicator">#FFB8DDF5</color>
+    <color name="navigation_container">#FFE1F1FC</color>
+    <color name="navigation_unselected">#FF526B80</color>
 </resources>

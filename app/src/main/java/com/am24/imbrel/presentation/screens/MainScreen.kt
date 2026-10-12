@@ -179,7 +179,7 @@ fun MainScreenContent(
                             )
                         }
 
-                        if (uiState.isRefreshing || uiState.isCitySearchLoading) {
+                        if (uiState.hasWeather && (uiState.isRefreshing || uiState.isCitySearchLoading)) {
                             WeatherRefreshOverlay()
                         }
                     }

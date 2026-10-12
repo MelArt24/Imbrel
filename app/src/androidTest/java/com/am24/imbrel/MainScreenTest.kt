@@ -1,5 +1,8 @@
 package com.am24.imbrel
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -20,6 +23,19 @@ import org.junit.Test
 class MainScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun initialCitySearch_showsOnlyForecastLoadingIndicator() {
+        showScreen(
+            isOnline = true,
+            uiState = WeatherUiState(status = WeatherUiStatus.Loading, isCitySearchLoading = true),
+        )
+
+        composeRule
+            .onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+            .assertCountEquals(1)
+        composeRule.onNodeWithContentDescription("Loading weather").assertDoesNotExist()
+    }
 
     @Test
     fun banner_isVisibleOffline() {

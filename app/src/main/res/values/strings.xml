@@ -51,4 +51,9 @@
     <string name="weather_hail">Hail</string>
     <string name="weather_thunderstorm">Thunderstorm</string>
     <string name="city_query_required">Enter a city name</string>
+    <string name="navigation_home">Home</string>
+    <string name="navigation_places">Places</string>
+    <string name="navigation_settings">Settings</string>
+    <string name="places_placeholder">Search history, saved cities and cached weather will be available here.</string>
+    <string name="settings_placeholder">App settings will be available here.</string>
 </resources>

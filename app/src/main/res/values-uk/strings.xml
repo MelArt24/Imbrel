@@ -51,4 +51,9 @@
     <string name="weather_hail">Град</string>
     <string name="weather_thunderstorm">Гроза</string>
     <string name="city_query_required">Введіть назву міста</string>
+    <string name="navigation_home">Головна</string>
+    <string name="navigation_places">Місця</string>
+    <string name="navigation_settings">Налаштування</string>
+    <string name="places_placeholder">Тут з’являться історія пошуку, збережені міста та кеш погоди.</string>
+    <string name="settings_placeholder">Тут з’являться налаштування застосунку.</string>
 </resources>
