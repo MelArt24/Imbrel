@@ -40,6 +40,7 @@ fun CitySearchDialog(
     onSearchStarted: () -> Unit,
 ) {
     val state by viewModel.citySearchState.collectAsStateWithLifecycle()
+
     CitySearchDialogContent(
         state = state,
         onQueryChange = viewModel::updateCitySearchQuery,
@@ -88,9 +89,11 @@ private fun CitySearchForm(
 ) {
     val focusRequester = remember { FocusRequester() }
     val submit = citySearchAction(state, onSearch)
+
     LaunchedEffect(Unit) {
         if (!state.isLoading && state.successId == null) focusRequester.requestFocus()
     }
+
     OutlinedTextField(
         value = state.query,
         onValueChange = onQueryChange,
@@ -106,12 +109,14 @@ private fun CitySearchForm(
             ),
         keyboardActions = KeyboardActions(onSearch = { submit() }),
     )
+
     val errorMessage =
         when {
             state.isQueryBlank -> stringResource(R.string.city_query_required)
             state.error != null -> stringResource(state.error.messageResource())
             else -> null
         }
+
     errorMessage?.let { message ->
         Text(
             text = message,

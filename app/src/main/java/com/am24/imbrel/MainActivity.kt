@@ -1,7 +1,6 @@
 package com.am24.imbrel
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -89,9 +88,7 @@ class MainActivity : ComponentActivity() {
         requestId: Long,
     ) {
         if (!viewModel.isCurrentRequest(requestId)) return
-        if (!viewModel.isOnline.value) {
-            viewModel.requestCurrentLocationWeather(expectedRequestId = requestId)
-        } else if (isLocationEnabled()) {
+        if (!viewModel.isOnline.value || isLocationEnabled()) {
             viewModel.requestCurrentLocationWeather(expectedRequestId = requestId)
         } else {
             viewModel.requestCurrentLocationWeather(
@@ -111,7 +108,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isLocationEnabled(): Boolean {
-        val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
             locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }

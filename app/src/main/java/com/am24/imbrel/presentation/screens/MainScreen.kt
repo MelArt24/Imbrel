@@ -86,6 +86,7 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
