@@ -7,6 +7,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.rememberNavController
+import com.am24.imbrel.ads.AdMobBannerSlot
+import com.am24.imbrel.ads.AdsUiState
 import com.am24.imbrel.presentation.screens.CitySearchDialog
 import com.am24.imbrel.presentation.screens.MainScreen
 import com.am24.imbrel.presentation.screens.PlacesScreen
@@ -18,6 +20,8 @@ fun WeatherApp(
     onLocationRequest: () -> Unit,
     placesViewModel: PlacesViewModel,
     settingsViewModel: SettingsViewModel? = null,
+    adsState: AdsUiState = AdsUiState(),
+    onPrivacyOptions: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     var showCitySearch by rememberSaveable { mutableStateOf(false) }
@@ -35,7 +39,8 @@ fun WeatherApp(
 
     WeatherNavigation(
         navController = navController,
-        settingsContent = { SettingsScreen(settingsViewModel) },
+        settingsContent = { SettingsScreen(settingsViewModel, adsState, onPrivacyOptions) },
+        bannerContent = { isHome -> AdMobBannerSlot(isHome, adsState) },
         placesContent = {
             PlacesScreen(placesViewModel, onSearchClick = {
                 navigateHome()

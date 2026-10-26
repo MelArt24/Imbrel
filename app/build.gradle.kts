@@ -1,4 +1,5 @@
 import io.gitlab.arturbosch.detekt.Detekt
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
@@ -10,6 +11,35 @@ plugins {
     alias(libs.plugins.ktlint)
     id("org.jetbrains.kotlinx.kover") version "0.9.8"
     alias(libs.plugins.compose.compiler)
+}
+
+val releaseAdMobAppId = providers.gradleProperty("ADMOB_APP_ID").map { it.trim() }.orElse("")
+val releaseAdMobBannerId = providers.gradleProperty("ADMOB_BANNER_AD_UNIT_ID").map { it.trim() }.orElse("")
+
+val validateReleaseAdMobIds by tasks.registering {
+    group = "verification"
+    description = "Reject missing, malformed, or Google test AdMob identifiers in release builds."
+    doLast {
+        val appId = releaseAdMobAppId.get()
+        val bannerId = releaseAdMobBannerId.get()
+        val testPublisher = "ca-app-pub-3940256099942544"
+        require(Regex("ca-app-pub-[0-9]{16}~[0-9]{10}").matches(appId) && !appId.startsWith(testPublisher)) {
+            "Set a real ADMOB_APP_ID in Gradle properties; missing, malformed, and Google test IDs are forbidden for release."
+        }
+        require(Regex("ca-app-pub-[0-9]{16}/[0-9]{10}").matches(bannerId) && !bannerId.startsWith(testPublisher)) {
+            "Set a real ADMOB_BANNER_AD_UNIT_ID in Gradle properties; Google test IDs are forbidden for release."
+        }
+        require(appId.substringBefore('~') == bannerId.substringBefore('/')) { "AdMob App ID and Banner ID must use the same publisher." }
+        require(!appId.contains("0000000000000000") && !appId.endsWith("0000000000") && !bannerId.endsWith("0000000000")) {
+            "Placeholder AdMob identifiers are forbidden for release."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild" || name == "generateReleaseBuildConfig" || name == "processReleaseMainManifest") {
+        dependsOn(validateReleaseAdMobIds)
+    }
 }
 
 android {
@@ -27,7 +57,26 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField(
+                "boolean",
+                "UMP_FORCE_EEA",
+                providers.gradleProperty("UMP_FORCE_EEA").map { (it == "true").toString() }.getOrElse("false"),
+            )
+            val umpDevice = providers.gradleProperty("UMP_TEST_DEVICE_HASH").getOrElse("").filter { it.isLetterOrDigit() }
+            buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"$umpDevice\"")
+            manifestPlaceholders["adMobAppId"] = "ca-app-pub-3940256099942544~3347511713"
+            buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/9214589741\"")
+        }
         release {
+            buildConfigField("boolean", "UMP_FORCE_EEA", "false")
+            buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"\"")
+            manifestPlaceholders["adMobAppId"] = releaseAdMobAppId.get().ifBlank { "UNCONFIGURED_ADMOB_APP_ID" }
+            buildConfigField(
+                "String",
+                "ADMOB_BANNER_AD_UNIT_ID",
+                "\"${releaseAdMobBannerId.get().filter { it.isDigit() || it in "ca-app-pub-/" }}\"",
+            )
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -40,9 +89,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
 
     buildFeatures {
         viewBinding = true
@@ -51,7 +97,7 @@ android {
     }
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 
-    packagingOptions {
+    packaging {
         resources {
             excludes += "/META-INF/LICENSE.md"
             excludes += "/META-INF/LICENSE-notice.md"
@@ -61,7 +107,13 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
+}
+
 dependencies {
+    implementation(libs.google.mobile.ads)
+    implementation(libs.google.ump)
     implementation(libs.androidx.compose.material3)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 

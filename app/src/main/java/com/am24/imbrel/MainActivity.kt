@@ -19,7 +19,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.am24.imbrel.ads.AdsConsentController
+import com.am24.imbrel.ads.UmpConsentGateway
 import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.presentation.DialogManager
 import com.am24.imbrel.presentation.MainViewModel
@@ -30,12 +34,16 @@ import com.am24.imbrel.presentation.theme.WeatherForecastAppTheme
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
+    private lateinit var adsController: AdsConsentController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val viewModel: MainViewModel by viewModel()
         val placesViewModel: PlacesViewModel by viewModel()
         val settingsViewModel: SettingsViewModel by viewModel()
+        initializeAds()
         setContent {
+            val adsState by adsController.uiState.collectAsStateWithLifecycle()
             val context = LocalContext.current
             var permissionRequestId by rememberSaveable { mutableLongStateOf(-1L) }
             val locationPermissionLauncher =
@@ -79,9 +87,31 @@ class MainActivity : ComponentActivity() {
             }
 
             WeatherForecastAppTheme {
-                WeatherApp(viewModel, requestLocation, placesViewModel, settingsViewModel)
+                WeatherApp(
+                    viewModel,
+                    requestLocation,
+                    placesViewModel,
+                    settingsViewModel,
+                    adsState = adsState,
+                    onPrivacyOptions = adsController::showPrivacyOptions,
+                )
             }
         }
+    }
+
+    private fun initializeAds() {
+        adsController =
+            AdsConsentController(
+                UmpConsentGateway(this),
+                (application as WeatherForecastApplication).adsInitializer,
+                lifecycleScope,
+            )
+        adsController.start()
+    }
+
+    override fun onDestroy() {
+        adsController.close()
+        super.onDestroy()
     }
 
     private fun checkLocation(

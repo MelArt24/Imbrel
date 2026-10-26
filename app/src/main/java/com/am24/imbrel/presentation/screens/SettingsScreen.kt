@@ -36,6 +36,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.am24.imbrel.R
+import com.am24.imbrel.ads.AdPrivacySettings
+import com.am24.imbrel.ads.AdsUiState
 import com.am24.imbrel.domain.model.SavedCity
 import com.am24.imbrel.domain.model.StartupMode
 import com.am24.imbrel.presentation.SettingsUiState
@@ -47,7 +49,11 @@ import com.am24.imbrel.presentation.theme.SettingsDialogColor
 import com.am24.imbrel.presentation.theme.SettingsSecondaryTextColor
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel? = null) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel? = null,
+    adsState: AdsUiState = AdsUiState(),
+    onPrivacyOptions: () -> Unit = {},
+) {
     val state = viewModel?.uiState?.collectAsStateWithLifecycle()?.value ?: SettingsUiState()
     SettingsScreenContent(
         state,
@@ -58,6 +64,8 @@ fun SettingsScreen(viewModel: SettingsViewModel? = null) {
             { viewModel?.clearCache() },
             { viewModel?.retry() },
         ),
+        adsState,
+        onPrivacyOptions,
     )
 }
 
@@ -73,6 +81,8 @@ class SettingsActions(
 fun SettingsScreenContent(
     state: SettingsUiState,
     actions: SettingsActions = SettingsActions(),
+    adsState: AdsUiState = AdsUiState(),
+    onPrivacyOptions: () -> Unit = {},
 ) {
     MaterialTheme(
         colorScheme =
@@ -84,20 +94,22 @@ fun SettingsScreenContent(
                 onSurface = Color.White,
                 onSurfaceVariant = SettingsSecondaryTextColor,
             ),
-    ) { SettingsContent(state, actions) }
+    ) { SettingsContent(state, actions, adsState, onPrivacyOptions) }
 }
 
 @Composable
 private fun SettingsContent(
     state: SettingsUiState,
     actions: SettingsActions,
+    adsState: AdsUiState,
+    onPrivacyOptions: () -> Unit,
 ) {
     var chooseCity by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     val enabled = !state.isLoading && !state.hasReadError && !state.isSaving && !state.isClearingCache
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(ScreenGradientTopColor, ScreenGradientBottomColor)))) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("settings_list"),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         ) {
@@ -114,6 +126,11 @@ private fun SettingsContent(
             item { StartupSettingsCard(state, enabled, actions.onModeSelected) }
             item { DefaultCityCard(state, enabled, { chooseCity = true }, actions.onResetCity) }
             item { CacheSettingsCard(state, enabled) { confirmClear = true } }
+            if (adsState.privacyOptionsRequired) {
+                item {
+                    AdPrivacySettings(adsState, onPrivacyOptions)
+                }
+            }
         }
     }
     if (chooseCity) {

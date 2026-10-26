@@ -95,4 +95,7 @@
     <string name="settings_subtitle">Налаштуйте Imbrel під себе</string>
     <string name="settings_default_city_hint">Виберіть місто за замовчуванням, щоб увімкнути цей режим запуску.</string>
     <string name="settings_cache_description">Збережені прогнози допомагають переглядати погоду офлайн.</string>
+    <string name="ad_privacy_title">Конфіденційність реклами</string>
+    <string name="ad_privacy_options">Керувати вибором конфіденційності</string>
+    <string name="ad_privacy_error">Не вдалося відкрити параметри конфіденційності. Спробуйте ще раз.</string>
 </resources>

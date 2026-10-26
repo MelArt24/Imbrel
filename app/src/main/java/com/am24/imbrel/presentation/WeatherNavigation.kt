@@ -2,11 +2,15 @@ package com.am24.imbrel.presentation
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,11 +54,12 @@ fun WeatherNavigation(
     navController: NavHostController = rememberNavController(),
     placesContent: @Composable () -> Unit,
     settingsContent: @Composable () -> Unit = { SettingsScreen() },
+    bannerContent: @Composable (Boolean) -> Unit = {},
     homeContent: @Composable () -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        bottomBar = { FloatingWeatherNavigationBar(navController) },
+        bottomBar = { FloatingWeatherNavigationBar(navController, bannerContent) },
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -69,7 +74,10 @@ fun WeatherNavigation(
 }
 
 @Composable
-private fun FloatingWeatherNavigationBar(navController: NavHostController) {
+private fun FloatingWeatherNavigationBar(
+    navController: NavHostController,
+    bannerContent: @Composable (Boolean) -> Unit,
+) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val background =
         when (backStackEntry?.destination?.route) {
@@ -78,7 +86,13 @@ private fun FloatingWeatherNavigationBar(navController: NavHostController) {
             else -> MaterialTheme.colorScheme.surface
         }
     Surface(color = background) {
-        Column(modifier = Modifier.navigationBarsPadding()) {
+        Column(
+            modifier =
+                Modifier
+                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .testTag("navigation_with_ads"),
+        ) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(24.dp),
@@ -87,6 +101,7 @@ private fun FloatingWeatherNavigationBar(navController: NavHostController) {
             ) {
                 WeatherNavigationBar(navController)
             }
+            bannerContent(backStackEntry?.destination?.route == WeatherDestination.Home.route)
         }
     }
 }
@@ -96,6 +111,7 @@ private fun WeatherNavigationBar(navController: NavHostController) {
     val backStackEntry by navController.currentBackStackEntryAsState()
 
     NavigationBar(
+        modifier = Modifier.testTag("weather_navigation_bar"),
         containerColor = colorResource(R.color.navigation_container),
         tonalElevation = 0.dp,
         windowInsets = WindowInsets(0, 0, 0, 0),
