@@ -54,6 +54,20 @@
     <string name="navigation_home">Home</string>
     <string name="navigation_places">Places</string>
     <string name="navigation_settings">Settings</string>
-    <string name="places_placeholder">Search history, saved cities and cached weather will be available here.</string>
+    <string name="favorites">Favorites</string>
+    <string name="recent_searches">Recent searches</string>
+    <string name="favorites_empty">No favorite cities yet. Tap a star next to a city to save it.</string>
+    <string name="recent_searches_empty">No recent searches. Search for a city on Home to add it here.</string>
+    <string name="add_favorite">Add %1$s to favorites</string>
+    <string name="remove_favorite">Remove %1$s from favorites</string>
+    <string name="clear_history">Clear history</string>
+    <string name="clear_history_title">Clear search history?</string>
+    <string name="clear_history_message">Recent searches will be removed. Your favorite cities will remain saved.</string>
+    <string name="places_storage_error">Could not read or update saved cities. Please try again.</string>
     <string name="settings_placeholder">App settings will be available here.</string>
+    <string name="places_subtitle">Saved cities and recent searches</string>
+    <string name="favorite_city_hint">Saved for quick access</string>
+    <string name="recent_searches_all_favorites">Your recent cities are already in Favorites.</string>
+    <string name="searched_today">Today, %1$s</string>
+    <string name="searched_yesterday">Yesterday, %1$s</string>
 </resources>

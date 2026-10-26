@@ -21,14 +21,17 @@ import com.am24.imbrel.data.remote.WeatherApiService
 import com.am24.imbrel.data.repository.DataStoreSelectedPlaceRepository
 import com.am24.imbrel.data.repository.GeocodingRepositoryImpl
 import com.am24.imbrel.data.repository.LocationRepositoryImpl
+import com.am24.imbrel.data.repository.RoomPlacesRepository
 import com.am24.imbrel.data.repository.WeatherRepositoryImpl
 import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.repository.GeocodingRepository
 import com.am24.imbrel.domain.repository.LocationRepository
+import com.am24.imbrel.domain.repository.PlacesRepository
 import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
 import com.am24.imbrel.presentation.AndroidWeatherConditionLocalizer
 import com.am24.imbrel.presentation.MainViewModel
+import com.am24.imbrel.presentation.PlacesViewModel
 import com.am24.imbrel.presentation.WeatherConditionLocalizer
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.core.qualifier.named
@@ -66,9 +69,12 @@ val appModule =
                     get(),
                     WeatherDatabase::class.java,
                     "weather_cache.db",
-                ).build()
+                ).addMigrations(WeatherDatabase.MIGRATION_1_2)
+                .build()
         }
         single { get<WeatherDatabase>().weatherDao() }
+        single { get<WeatherDatabase>().placesDao() }
+        single<PlacesRepository> { RoomPlacesRepository(get(), get()) }
         single<WeatherLocalDataSource> { RoomWeatherLocalDataSource(get()) }
         single<TimeProvider> { ClockTimeProvider() }
         single { WeatherCachePolicy() }
@@ -82,6 +88,7 @@ val appModule =
                 networkMonitor = get(),
             )
         }
+        viewModel { PlacesViewModel(get(), get(), get(), get()) }
 
         viewModel {
             MainViewModel(
@@ -89,6 +96,7 @@ val appModule =
                 getCurrentLocationUseCase = get(),
                 searchCityWeatherUseCase = get(),
                 selectedPlaceRepository = get(),
+                recordCitySearchUseCase = get(),
                 weatherPresentationMapper = get(),
                 networkMonitor = get(),
             )

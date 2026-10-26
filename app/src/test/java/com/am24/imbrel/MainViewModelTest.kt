@@ -10,6 +10,7 @@ import com.am24.imbrel.domain.model.DailyWeather
 import com.am24.imbrel.domain.model.GeocodedLocation
 import com.am24.imbrel.domain.model.HourlyWeather
 import com.am24.imbrel.domain.model.LocationCoordinates
+import com.am24.imbrel.domain.model.SavedCity
 import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.model.UserLocation
 import com.am24.imbrel.domain.model.WeatherForecast
@@ -19,6 +20,7 @@ import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
 import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
+import com.am24.imbrel.domain.usecase.RecordCitySearchUseCase
 import com.am24.imbrel.domain.usecase.SearchCityWeatherUseCase
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.WeatherUiError
@@ -1415,6 +1417,173 @@ class MainViewModelTest {
             assertSame(SelectedPlace.CurrentLocation, selected.value)
         }
 
+    @Test
+    fun successfulManualSearch_recordsHistoryWithResolvedMetadata() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository()
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository(),
+                    geocodingRepository = FakeGeocodingRepository(localizedName = "Resolved Kyiv"),
+                    placesRepository = places,
+                )
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("  Kyiv   City ")
+            viewModel.submitCitySearch(closeOnSubmit = true)
+            advanceUntilIdle()
+            assertEquals(
+                listOf(SelectedPlace.City("Kyiv City", "Resolved Kyiv", LocationCoordinates(50.45, 30.52))),
+                places.searches,
+            )
+        }
+
+    @Test
+    fun startupAndGps_doNotRecordSearchHistory() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository()
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.City("Kyiv", "Kyiv", LocationCoordinates(50.45, 30.52)))
+            val viewModel = viewModel(FakeWeatherRepository(), selectedPlaceRepository = selected, placesRepository = places)
+            viewModel.initializeStartup()
+            advanceUntilIdle()
+            viewModel.requestCurrentLocationWeather()
+            advanceUntilIdle()
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun failedCancelledAndEmptySearches_doNotRecordHistory() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository()
+            val responses =
+                listOf<suspend () -> WeatherForecast>(
+                    { throw DomainFailureException(DomainError.Api(ApiErrorReason.NotFound)) },
+                    { throw CancellationException() },
+                    { emptyForecast() },
+                )
+            responses.forEach { response ->
+                viewModel(FakeWeatherRepository(response), placesRepository = places).requestCityWeather("Kyiv")
+                advanceUntilIdle()
+            }
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun cancelledDialogSearch_doesNotRecordHistoryEvenAfterLateResponse() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<Unit>()
+            val places = FakePlacesRepository()
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        withContext(NonCancellable) { pending.await() }
+                        successForecast()
+                    },
+                    placesRepository = places,
+                )
+            viewModel.openCitySearch()
+            viewModel.updateCitySearchQuery("Kyiv")
+            viewModel.submitCitySearch()
+            runCurrent()
+            viewModel.closeCitySearch()
+            pending.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun supersededSearch_recordsOnlyLatestCity() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<Unit>()
+            val places = FakePlacesRepository()
+            var calls = 0
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (calls++ == 0) withContext(NonCancellable) { pending.await() }
+                        successForecast()
+                    },
+                    placesRepository = places,
+                )
+            viewModel.requestCityWeather("Old")
+            runCurrent()
+            viewModel.requestCityWeather("Latest")
+            runCurrent()
+            pending.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(listOf("Latest"), places.searches.map { it.normalizedQuery })
+            assertEquals(
+                "Latest",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+        }
+
+    @Test
+    fun selectingSavedCityOffline_usesCoordinatesPersistsSelectionAndDoesNotRecordHistory() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository()
+            val selected = FakeSelectedPlaceRepository()
+            val weather = FakeWeatherRepository()
+            val viewModel =
+                viewModel(
+                    weather,
+                    geocodingRepository = FakeGeocodingRepository(found = false),
+                    networkMonitor = FakeNetworkMonitor(false),
+                    selectedPlaceRepository = selected,
+                    placesRepository = places,
+                )
+            val city = SavedCity(1L, "Kyiv", "Saved Kyiv", LocationCoordinates(50.45, 30.52), 100L, true)
+            viewModel.selectCity(city)
+            advanceUntilIdle()
+            assertEquals("50.45", weather.lastLat)
+            assertEquals("30.52", weather.lastLon)
+            assertEquals(city.toSelectedPlace(), selected.value)
+            assertEquals(
+                "Saved Kyiv",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun failedSavedCitySelection_preservesPreviousSelectedPlaceAndRetryDoesNotRecordHistory() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository()
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            var calls = 0
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (calls++ == 0) throw DomainFailureException(DomainError.Network(NetworkErrorReason.Offline))
+                        successForecast()
+                    },
+                    selectedPlaceRepository = selected,
+                    placesRepository = places,
+                )
+            val city = SavedCity(1L, "Kyiv", "Kyiv", LocationCoordinates(50.45, 30.52), 100L, true)
+            viewModel.selectCity(city)
+            advanceUntilIdle()
+            assertEquals(SelectedPlace.CurrentLocation, selected.value)
+            assertNotNull(viewModel.uiState.value.error)
+            viewModel.retryLastRequest()
+            advanceUntilIdle()
+            assertEquals(city.toSelectedPlace(), selected.value)
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun historyStorageFailure_preservesLoadedWeather() =
+        runTest(testDispatcher) {
+            val places = FakePlacesRepository().apply { mutationFailure = IllegalStateException("Storage unavailable") }
+            val viewModel = viewModel(FakeWeatherRepository(), placesRepository = places)
+            viewModel.requestCityWeather("Kyiv")
+            advanceUntilIdle()
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertNotNull(viewModel.uiState.value.currentWeather)
+            assertTrue(places.searches.isEmpty())
+        }
+
     private class FakeSelectedPlaceRepository(
         var value: SelectedPlace? = null,
         private val read: (suspend () -> SelectedPlace?)? = null,
@@ -1445,6 +1614,7 @@ class MainViewModelTest {
         geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
         networkMonitor: FakeNetworkMonitor = FakeNetworkMonitor(),
         selectedPlaceRepository: SelectedPlaceRepository = FakeSelectedPlaceRepository(),
+        placesRepository: FakePlacesRepository = FakePlacesRepository(),
     ) = MainViewModel(
         GetCurrentWeatherUseCase(repository),
         GetCurrentLocationUseCase(locationRepository, networkMonitor),
@@ -1455,6 +1625,7 @@ class MainViewModelTest {
         ),
         networkMonitor,
         selectedPlaceRepository,
+        RecordCitySearchUseCase(placesRepository),
     )
 
     private class FakeLocationRepository(

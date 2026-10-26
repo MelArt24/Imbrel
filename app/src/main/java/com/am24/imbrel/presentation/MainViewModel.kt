@@ -7,11 +7,13 @@ import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.domain.model.CityWeatherResult
+import com.am24.imbrel.domain.model.SavedCity
 import com.am24.imbrel.domain.model.SelectedPlace
 import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
+import com.am24.imbrel.domain.usecase.RecordCitySearchUseCase
 import com.am24.imbrel.domain.usecase.SearchCityWeatherUseCase
 import com.am24.imbrel.presentation.mapper.WeatherPresentationMapper
 import com.am24.imbrel.presentation.model.WeatherModel
@@ -31,7 +33,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 // Weather and permission commands share one screen state and request generation.
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 class MainViewModel(
     private val getCurrentWeatherUseCase: GetCurrentWeatherUseCase,
     private val getCurrentLocationUseCase: GetCurrentLocationUseCase,
@@ -39,6 +41,7 @@ class MainViewModel(
     private val weatherPresentationMapper: WeatherPresentationMapper,
     networkMonitor: NetworkMonitor,
     private val selectedPlaceRepository: SelectedPlaceRepository,
+    private val recordCitySearchUseCase: RecordCitySearchUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
@@ -180,12 +183,18 @@ class MainViewModel(
 
     fun requestCityWeather(city: String) = requestCityWeather(city, restoredPlace = null)
 
+    fun selectCity(city: SavedCity) {
+        requestCityWeather(city.normalizedQuery, city.toSelectedPlace(), persistSelection = true)
+    }
+
     private fun requestCityWeather(
         city: String,
         restoredPlace: SelectedPlace.City?,
         fromSearchScreen: Boolean = false,
+        recordHistory: Boolean = restoredPlace == null,
+        persistSelection: Boolean = restoredPlace == null,
     ) {
-        lastRequest = Request.City(city, restoredPlace)
+        lastRequest = Request.City(city, restoredPlace, recordHistory, persistSelection)
         val id = beginRequest(Operation.CitySearch)
         if (fromSearchScreen) {
             _citySearchState.update { it.copy(isLoading = true, isQueryBlank = false, error = null, requestId = id, successId = null) }
@@ -195,7 +204,7 @@ class MainViewModel(
                 try {
                     val result =
                         if (restoredPlace == null) searchCityWeatherUseCase(city) else searchCityWeatherUseCase(restoredPlace)
-                    completeCitySearch(id, result, persistSelection = restoredPlace == null, fromSearchScreen = fromSearchScreen)
+                    completeCitySearch(id, result, persistSelection, fromSearchScreen, recordHistory)
                 } catch (cancellation: CancellationException) {
                     clearCancelledRequest(id)
                     throw cancellation
@@ -222,6 +231,7 @@ class MainViewModel(
         result: CityWeatherResult,
         persistSelection: Boolean,
         fromSearchScreen: Boolean,
+        recordHistory: Boolean,
     ) {
         val weather = weatherPresentationMapper(result.forecast, result.city)
         currentCoroutineContext().ensureActive()
@@ -232,6 +242,9 @@ class MainViewModel(
         }
         if (persistSelection && hasForecast) {
             saveSelection(id, result.toSelectedPlace())
+        }
+        if (recordHistory && hasForecast) {
+            saveSearchHistory(id, result.toSelectedPlace())
         }
         showWeather(id, weather.current, weather.daily)
         if (fromSearchScreen && isCurrentRequest(id)) {
@@ -317,7 +330,13 @@ class MainViewModel(
 
     fun retryLastRequest() {
         when (val request = lastRequest) {
-            is Request.City -> requestCityWeather(request.city, request.restoredPlace)
+            is Request.City ->
+                requestCityWeather(
+                    request.city,
+                    request.restoredPlace,
+                    recordHistory = request.recordHistory,
+                    persistSelection = request.persistSelection,
+                )
             is Request.CurrentLocation ->
                 requestCurrentLocationWeather(
                     allowCurrentLocation = request.allowCurrentLocation,
@@ -341,6 +360,26 @@ class MainViewModel(
                 throw cancellation
             } catch (_: Exception) {
                 // Persistence is best-effort; a valid forecast remains visible.
+            }
+        }
+    }
+
+    private suspend fun saveSearchHistory(
+        id: Long,
+        city: SelectedPlace.City,
+    ) {
+        selectionMutex.withLock {
+            currentCoroutineContext().ensureActive()
+            if (!isCurrentRequest(id)) return
+            try {
+                recordCitySearchUseCase(city)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // A storage failure must not discard a successfully loaded forecast.
+                if (isCurrentRequest(id)) {
+                    _events.trySend(WeatherUiEvent.ShowError(WeatherUiError.CitySearch(DomainError.Unknown)))
+                }
             }
         }
     }
@@ -459,6 +498,8 @@ class MainViewModel(
         data class City(
             val city: String,
             val restoredPlace: SelectedPlace.City?,
+            val recordHistory: Boolean,
+            val persistSelection: Boolean,
         ) : Request
 
         data class CurrentLocation(

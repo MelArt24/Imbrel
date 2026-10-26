@@ -15,11 +15,6 @@ import androidx.compose.ui.unit.dp
 import com.am24.imbrel.R
 
 @Composable
-fun PlacesScreen() {
-    PlaceholderScreen(R.string.navigation_places, R.string.places_placeholder)
-}
-
-@Composable
 fun SettingsScreen() {
     PlaceholderScreen(R.string.navigation_settings, R.string.settings_placeholder)
 }

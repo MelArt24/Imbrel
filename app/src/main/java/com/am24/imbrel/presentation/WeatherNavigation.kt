@@ -32,7 +32,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.am24.imbrel.R
-import com.am24.imbrel.presentation.screens.PlacesScreen
 import com.am24.imbrel.presentation.screens.SettingsScreen
 import com.am24.imbrel.presentation.theme.ScreenGradientBottomColor
 
@@ -49,6 +48,7 @@ private enum class WeatherDestination(
 @Composable
 fun WeatherNavigation(
     navController: NavHostController = rememberNavController(),
+    placesContent: @Composable () -> Unit,
     homeContent: @Composable () -> Unit,
 ) {
     Scaffold(
@@ -61,7 +61,7 @@ fun WeatherNavigation(
             modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
         ) {
             composable(WeatherDestination.Home.route) { homeContent() }
-            composable(WeatherDestination.Places.route) { PlacesScreen() }
+            composable(WeatherDestination.Places.route) { placesContent() }
             composable(WeatherDestination.Settings.route) { SettingsScreen() }
         }
     }
@@ -71,10 +71,10 @@ fun WeatherNavigation(
 private fun FloatingWeatherNavigationBar(navController: NavHostController) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val background =
-        if (backStackEntry?.destination?.route == WeatherDestination.Home.route) {
-            ScreenGradientBottomColor
-        } else {
-            MaterialTheme.colorScheme.surface
+        when (backStackEntry?.destination?.route) {
+            WeatherDestination.Home.route -> ScreenGradientBottomColor
+            WeatherDestination.Places.route -> colorResource(R.color.places_background)
+            else -> MaterialTheme.colorScheme.surface
         }
     Surface(color = background) {
         Column(modifier = Modifier.navigationBarsPadding()) {

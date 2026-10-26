@@ -138,7 +138,7 @@ class MainScreenTest {
         composeRule.onNodeWithText("Tomorrow forecast").assertIsDisplayed().assertHasNoClickAction()
         composeRule.onNodeWithText("20").assertIsDisplayed()
         composeRule.onNodeWithText("Now").assertIsDisplayed()
-        composeRule.onNodeWithText("HOURS").performClick()
+        composeRule.onNodeWithText("NEXT 24 HOURS").performClick()
         composeRule.onNodeWithText("Current hour").assertIsDisplayed()
         composeRule.onNodeWithText("Future hour").assertDoesNotExist()
     }

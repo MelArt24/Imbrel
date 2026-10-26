@@ -54,6 +54,20 @@
     <string name="navigation_home">Головна</string>
     <string name="navigation_places">Місця</string>
     <string name="navigation_settings">Налаштування</string>
-    <string name="places_placeholder">Тут з’являться історія пошуку, збережені міста та кеш погоди.</string>
+    <string name="favorites">Обрані міста</string>
+    <string name="recent_searches">Нещодавні пошуки</string>
+    <string name="favorites_empty">Обраних міст ще немає. Натисніть зірочку біля міста, щоб зберегти його.</string>
+    <string name="recent_searches_empty">Нещодавніх пошуків ще немає. Знайдіть місто на головному екрані, щоб додати його сюди.</string>
+    <string name="add_favorite">Додати %1$s до обраного</string>
+    <string name="remove_favorite">Видалити %1$s з обраного</string>
+    <string name="clear_history">Очистити історію</string>
+    <string name="clear_history_title">Очистити історію пошуку?</string>
+    <string name="clear_history_message">Нещодавні пошуки буде видалено. Обрані міста залишаться збереженими.</string>
+    <string name="places_storage_error">Не вдалося прочитати або оновити збережені міста. Спробуйте ще раз.</string>
     <string name="settings_placeholder">Тут з’являться налаштування застосунку.</string>
+    <string name="places_subtitle">Збережені міста та нещодавні пошуки</string>
+    <string name="favorite_city_hint">Збережено для швидкого доступу</string>
+    <string name="recent_searches_all_favorites">Нещодавно знайдені міста вже є в обраних.</string>
+    <string name="searched_today">Сьогодні, %1$s</string>
+    <string name="searched_yesterday">Вчора, %1$s</string>
 </resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="places_background">#FF101C27</color>
+    <color name="places_favorite_background">#FF20384D</color>
+    <color name="places_recent_background">#FF172A3B</color>
+    <color name="places_icon_background">#FF2C4A61</color>
+    <color name="places_text">#FFC9E8FC</color>
+    <color name="places_secondary_text">#FFABC0D0</color>
+</resources>

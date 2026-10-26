@@ -11,9 +11,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.am24.imbrel.presentation.PlacesUiState
 import com.am24.imbrel.presentation.WeatherNavigation
 import com.am24.imbrel.presentation.WeatherUiState
 import com.am24.imbrel.presentation.screens.MainScreenContent
+import com.am24.imbrel.presentation.screens.PlacesScreenContent
 import com.am24.imbrel.presentation.theme.WeatherForecastAppTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -72,7 +74,10 @@ class WeatherNavigationTest {
     private fun NavigationContent() {
         navController = rememberNavController()
         WeatherForecastAppTheme {
-            WeatherNavigation(navController) {
+            WeatherNavigation(
+                navController,
+                placesContent = { PlacesScreenContent(PlacesUiState(isLoading = false), {}, { _, _ -> }, {}) },
+            ) {
                 MainScreenContent(
                     uiState = WeatherUiState(),
                     isOnline = true,

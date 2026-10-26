@@ -9,4 +9,10 @@
     <color name="navigation_indicator">#FFB8DDF5</color>
     <color name="navigation_container">#FFE1F1FC</color>
     <color name="navigation_unselected">#FF526B80</color>
+    <color name="places_background">#FFF3F8FD</color>
+    <color name="places_favorite_background">#FFE1F1FC</color>
+    <color name="places_recent_background">#FFFFFFFF</color>
+    <color name="places_icon_background">#FFCDE5F7</color>
+    <color name="places_text">#FF214F78</color>
+    <color name="places_secondary_text">#FF526B80</color>
 </resources>
