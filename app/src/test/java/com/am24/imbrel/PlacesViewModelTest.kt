@@ -8,6 +8,7 @@ import com.am24.imbrel.domain.usecase.SetCityFavoriteUseCase
 import com.am24.imbrel.presentation.PlacesViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -95,6 +96,66 @@ class PlacesViewModelTest {
             runCurrent()
             assertFalse(viewModel.uiState.value.hasStorageError)
             assertEquals(listOf(city), viewModel.uiState.value.recentSearches)
+        }
+
+    @Test
+    fun cachedList_reportsLoadingErrorRetryAndReactiveUpdates() =
+        runTest(dispatcher) {
+            var fail = true
+            val cached = kotlinx.coroutines.flow.MutableStateFlow(emptyList<com.am24.imbrel.domain.model.CachedForecast>())
+            val weatherRepository =
+                object : com.am24.imbrel.domain.repository.WeatherRepository {
+                    override fun observeCachedForecasts() =
+                        kotlinx.coroutines.flow.flow {
+                            if (fail) error("Storage unavailable")
+                            emitAll(cached)
+                        }
+
+                    override suspend fun getWeatherData(
+                        lat: String?,
+                        lon: String?,
+                        city: String?,
+                    ) = error("API must not be called")
+                }
+            val repository = FakePlacesRepository()
+            val viewModel =
+                PlacesViewModel(
+                    ObserveSearchHistoryUseCase(repository),
+                    ObserveFavoriteCitiesUseCase(repository),
+                    SetCityFavoriteUseCase(repository),
+                    ClearSearchHistoryUseCase(repository),
+                    com.am24.imbrel.domain.usecase
+                        .ObserveCachedForecastsUseCase(weatherRepository),
+                )
+            assertTrue(viewModel.cachedState.value.loading)
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.cachedState.collect {} }
+            runCurrent()
+            assertTrue(viewModel.cachedState.value.error)
+            assertFalse(viewModel.cachedState.value.loading)
+            fail = false
+            viewModel.retry()
+            runCurrent()
+            assertFalse(viewModel.cachedState.value.error)
+            assertTrue(
+                viewModel.cachedState.value.items
+                    .isEmpty(),
+            )
+            val entry =
+                com.am24.imbrel.domain.model.CachedForecast(
+                    "city:test",
+                    com.am24.imbrel.domain.model.WeatherForecast(
+                        null,
+                        com.am24.imbrel.domain.model
+                            .CurrentWeather("Clear", 20.0, 1),
+                        emptyList(),
+                        emptyList(),
+                    ),
+                    0,
+                    com.am24.imbrel.domain.model.CacheStatus.Fresh,
+                )
+            cached.value = listOf(entry)
+            runCurrent()
+            assertEquals(listOf(entry), viewModel.cachedState.value.items)
         }
 
     private fun viewModel(repository: FakePlacesRepository) =

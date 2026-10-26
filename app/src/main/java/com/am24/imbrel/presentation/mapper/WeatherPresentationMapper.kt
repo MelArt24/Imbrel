@@ -16,6 +16,7 @@ class WeatherPresentationMapper(
     operator fun invoke(
         forecast: WeatherForecast,
         city: String?,
+        includeCurrentWithoutDaily: Boolean = false,
     ): WeatherPresentationResult {
         val cityName = city ?: forecast.cityName ?: "Your city"
         val hourlyWeather =
@@ -45,7 +46,8 @@ class WeatherPresentationMapper(
                 )
             }
         val current =
-            daily.firstOrNull()?.let { firstDay ->
+            daily.firstOrNull().let { firstDay ->
+                if (firstDay == null && !includeCurrentWithoutDaily) return@let null
                 WeatherModel(
                     city = cityName,
                     time = LocalTime.now(clock).format(CURRENT_TIME_FORMATTER),
@@ -58,10 +60,10 @@ class WeatherPresentationMapper(
                         forecast.current.temperature
                             .toInt()
                             .toString() + "\u00B0C",
-                    minimumTemperature = firstDay.minimumTemperature,
-                    maximumTemperature = firstDay.maximumTemperature,
+                    minimumTemperature = firstDay?.minimumTemperature.orEmpty(),
+                    maximumTemperature = firstDay?.maximumTemperature.orEmpty(),
                     imageURL = forecast.current.iconCode.toString(),
-                    hourlyWeather = firstDay.hourlyWeather,
+                    hourlyWeather = hourlyWeather,
                 )
             }
         return WeatherPresentationResult(current = current, daily = daily)

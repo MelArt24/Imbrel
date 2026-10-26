@@ -2,8 +2,10 @@ package com.am24.imbrel.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.domain.model.SavedCity
 import com.am24.imbrel.domain.usecase.ClearSearchHistoryUseCase
+import com.am24.imbrel.domain.usecase.ObserveCachedForecastsUseCase
 import com.am24.imbrel.domain.usecase.ObserveFavoriteCitiesUseCase
 import com.am24.imbrel.domain.usecase.ObserveSearchHistoryUseCase
 import com.am24.imbrel.domain.usecase.SetCityFavoriteUseCase
@@ -14,6 +16,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -35,10 +39,22 @@ class PlacesViewModel(
     observeFavoriteCities: ObserveFavoriteCitiesUseCase,
     private val setCityFavorite: SetCityFavoriteUseCase,
     private val clearSearchHistory: ClearSearchHistoryUseCase,
+    observeCachedForecasts: ObserveCachedForecastsUseCase? = null,
 ) : ViewModel() {
+    private val reload = MutableStateFlow(0)
+    val cachedState = reloadCache(observeCachedForecasts)
+
+    private fun reloadCache(observe: ObserveCachedForecastsUseCase?) =
+        reload
+            .flatMapLatest {
+                (observe?.invoke() ?: flowOf(emptyList()))
+                    .map { CachedPlacesState(items = it, loading = false) }
+                    .onStart { emit(CachedPlacesState()) }
+                    .catch { emit(CachedPlacesState(loading = false, error = true)) }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), CachedPlacesState())
+
     private val operationState = MutableStateFlow(OperationState())
     private val mutationMutex = Mutex()
-    private val reload = MutableStateFlow(0)
     val uiState =
         reload
             .flatMapLatest {
@@ -100,3 +116,9 @@ class PlacesViewModel(
         const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 }
+
+data class CachedPlacesState(
+    val items: List<CachedForecast> = emptyList(),
+    val loading: Boolean = true,
+    val error: Boolean = false,
+)

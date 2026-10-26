@@ -1584,6 +1584,124 @@ class MainViewModelTest {
             assertTrue(places.searches.isEmpty())
         }
 
+    @Test
+    fun cachedCoordinates_openOfflineWithoutPermissionGeocodingOrHistory() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val places = FakePlacesRepository()
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository { successForecast().copy(cityName = null) },
+                    locationRepository = FakeLocationRepository(currentFailure = IllegalStateException("No GPS permission")),
+                    geocodingRepository = FakeGeocodingRepository(found = false),
+                    networkMonitor = FakeNetworkMonitor(false),
+                    selectedPlaceRepository = selected,
+                    placesRepository = places,
+                )
+            val entry =
+                com.am24.imbrel.domain.model.CachedForecast(
+                    "lat:1.0000|lon:2.0000",
+                    successForecast().copy(cityName = null),
+                    0,
+                    com.am24.imbrel.domain.model.CacheStatus.Offline,
+                )
+            viewModel.selectCachedForecast(entry)
+            advanceUntilIdle()
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertEquals(
+                entry.key,
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+            assertTrue(selected.writes.isEmpty())
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun cachedKnownCity_persistsOnlySuccessfulSelectionWithoutHistory() =
+        runTest(testDispatcher) {
+            val selected = FakeSelectedPlaceRepository()
+            val places = FakePlacesRepository()
+            var fail = true
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (fail) throw DomainFailureException(DomainError.Network(NetworkErrorReason.Offline))
+                        successForecast()
+                    },
+                    selectedPlaceRepository = selected,
+                    placesRepository = places,
+                )
+            val place = SelectedPlace.City("Kyiv", "Kyiv", LocationCoordinates(50.45, 30.52))
+            val entry =
+                com.am24.imbrel.domain.model.CachedForecast(
+                    "city:kyiv",
+                    successForecast(),
+                    0,
+                    com.am24.imbrel.domain.model.CacheStatus.Offline,
+                    place,
+                )
+            viewModel.selectCachedForecast(entry)
+            advanceUntilIdle()
+            assertTrue(selected.writes.isEmpty())
+            assertTrue(viewModel.uiState.value.error is WeatherUiError.Cached)
+            fail = false
+            viewModel.retryLastRequest()
+            advanceUntilIdle()
+            assertEquals(listOf(place), selected.writes)
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertTrue(places.searches.isEmpty())
+        }
+
+    @Test
+    fun cacheWithOnlyCurrentWeather_opensSuccessfully() =
+        runTest(testDispatcher) {
+            val viewModel = viewModel(FakeWeatherRepository { emptyForecast() })
+            viewModel.selectCachedForecast(
+                com.am24.imbrel.domain.model.CachedForecast(
+                    "city:test",
+                    emptyForecast(),
+                    0,
+                    com.am24.imbrel.domain.model.CacheStatus.Fresh,
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(WeatherUiStatus.Success, viewModel.uiState.value.status)
+            assertNotNull(viewModel.uiState.value.currentWeather)
+            assertNotNull(viewModel.uiState.value.cachedForecast)
+        }
+
+    @Test
+    fun cachedRequest_lateCompletionCannotOverwriteNewerSelection() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<WeatherForecast>()
+            var count = 0
+            val viewModel =
+                viewModel(
+                    FakeWeatherRepository {
+                        if (count++ == 0) withContext(NonCancellable) { pending.await() } else successForecast().copy(cityName = "New")
+                    },
+                )
+            val first =
+                com.am24.imbrel.domain.model.CachedForecast(
+                    "city:first",
+                    successForecast(),
+                    0,
+                    com.am24.imbrel.domain.model.CacheStatus.Fresh,
+                )
+            viewModel.selectCachedForecast(first)
+            runCurrent()
+            viewModel.selectCachedForecast(first.copy(key = "city:second"))
+            runCurrent()
+            pending.complete(successForecast())
+            advanceUntilIdle()
+            assertEquals(
+                "second",
+                viewModel.uiState.value.currentWeather
+                    ?.city,
+            )
+        }
+
     private class FakeSelectedPlaceRepository(
         var value: SelectedPlace? = null,
         private val read: (suspend () -> SelectedPlace?)? = null,
@@ -1626,6 +1744,8 @@ class MainViewModelTest {
         networkMonitor,
         selectedPlaceRepository,
         RecordCitySearchUseCase(placesRepository),
+        com.am24.imbrel.domain.usecase
+            .OpenCachedForecastUseCase(repository),
     )
 
     private class FakeLocationRepository(
@@ -1665,6 +1785,14 @@ class MainViewModelTest {
             private set
         var lastLon: String? = null
             private set
+
+        override suspend fun openCachedForecast(key: String) =
+            com.am24.imbrel.domain.model.CachedForecast(
+                key,
+                response(),
+                0,
+                com.am24.imbrel.domain.model.CacheStatus.Offline,
+            )
 
         override suspend fun getWeatherData(
             lat: String?,

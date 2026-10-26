@@ -1,9 +1,11 @@
 package com.am24.imbrel.data.repository
 
+import com.am24.imbrel.data.cache.CachedForecastIndex
 import com.am24.imbrel.data.cache.TimeProvider
 import com.am24.imbrel.data.cache.WeatherCacheKeyFactory
 import com.am24.imbrel.data.cache.WeatherCachePolicy
 import com.am24.imbrel.data.error.toWeatherDomainError
+import com.am24.imbrel.data.local.PlacesDao
 import com.am24.imbrel.data.local.WeatherLocalDataSource
 import com.am24.imbrel.data.mapper.toDomain
 import com.am24.imbrel.data.remote.WeatherApiService
@@ -11,12 +13,16 @@ import com.am24.imbrel.domain.error.ApiErrorReason
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.error.NetworkErrorReason
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.domain.model.WeatherForecast
 import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.network.isOnlineOrDomainFailure
 import com.am24.imbrel.domain.repository.WeatherRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,7 +41,30 @@ class WeatherRepositoryImpl(
             override fun observeConnectivity(): Flow<Boolean> = flowOf(true)
         },
     private val timezone: String = ZoneId.systemDefault().id,
+    private val placesDao: PlacesDao? = null,
 ) : WeatherRepository {
+    override fun observeCachedForecasts() =
+        combine(
+            localDataSource.observeWeather(),
+            placesDao?.observeAll() ?: flowOf(emptyList()),
+            flow {
+                while (true) {
+                    emit(timeProvider.currentTimeMillis())
+                    delay(CACHE_STATUS_INTERVAL_MILLIS)
+                }
+            },
+        ) { cache, places, now -> CachedForecastIndex(cachePolicy).map(cache, places, now) }
+
+    override suspend fun openCachedForecast(key: String): CachedForecast =
+        mutexFor(key).withLock {
+            val cached = readCache(key)
+            val now = timeProvider.currentTimeMillis()
+            if (cached == null || !cachePolicy.isUsableOffline(cached.cachedAtMillis, now)) {
+                throw DomainFailureException(DomainError.Network(NetworkErrorReason.Offline))
+            }
+            CachedForecast(key, cached.forecast, cached.cachedAtMillis, CachedForecastIndex(cachePolicy).status(cached.cachedAtMillis, now))
+        }
+
     override suspend fun getWeatherData(
         lat: String?,
         lon: String?,
@@ -130,6 +159,7 @@ class WeatherRepositoryImpl(
         }
 
     private companion object {
+        const val CACHE_STATUS_INTERVAL_MILLIS = 1_000L
         val requestMutexes = ConcurrentHashMap<String, Mutex>()
     }
 }

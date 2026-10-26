@@ -70,4 +70,12 @@
     <string name="recent_searches_all_favorites">Your recent cities are already in Favorites.</string>
     <string name="searched_today">Today, %1$s</string>
     <string name="searched_yesterday">Yesterday, %1$s</string>
+    <string name="cached_weather">Cached weather</string>
+    <string name="cached_weather_empty">No cached forecasts yet</string>
+    <string name="cache_fresh">Fresh</string>
+    <string name="cache_offline">Available offline</string>
+    <string name="cache_expired">Expired</string>
+    <string name="cache_updated">Updated: %1$s</string>
+    <string name="cache_unavailable">Cached forecast is missing or expired. Choose another forecast.</string>
+    <string name="cache_storage_error">Unable to read cached forecasts. Try again.</string>
 </resources>

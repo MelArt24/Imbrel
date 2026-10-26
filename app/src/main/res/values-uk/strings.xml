@@ -70,4 +70,12 @@
     <string name="recent_searches_all_favorites">Нещодавно знайдені міста вже є в обраних.</string>
     <string name="searched_today">Сьогодні, %1$s</string>
     <string name="searched_yesterday">Вчора, %1$s</string>
+    <string name="cached_weather">Кешовані прогнози</string>
+    <string name="cached_weather_empty">Кешованих прогнозів ще немає</string>
+    <string name="cache_fresh">Свіжий</string>
+    <string name="cache_offline">Доступний офлайн</string>
+    <string name="cache_expired">Термін дії минув</string>
+    <string name="cache_updated">Оновлено: %1$s</string>
+    <string name="cache_unavailable">Прогноз відсутній або прострочений. Виберіть інший прогноз.</string>
+    <string name="cache_storage_error">Не вдалося прочитати кешовані прогнози. Спробуйте ще раз.</string>
 </resources>

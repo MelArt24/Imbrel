@@ -37,6 +37,9 @@ fun WeatherApp(
             PlacesScreen(placesViewModel, onSearchClick = {
                 navigateHome()
                 openSearch()
+            }, onCachedSelected = { entry ->
+                viewModel.selectCachedForecast(entry)
+                navigateHome()
             }) { city ->
                 viewModel.selectCity(city)
                 navigateHome()

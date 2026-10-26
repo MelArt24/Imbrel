@@ -6,6 +6,7 @@ import com.am24.imbrel.domain.error.ApiErrorReason
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.DomainFailureException
 import com.am24.imbrel.domain.error.LocationErrorReason
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.domain.model.CityWeatherResult
 import com.am24.imbrel.domain.model.SavedCity
 import com.am24.imbrel.domain.model.SelectedPlace
@@ -13,6 +14,7 @@ import com.am24.imbrel.domain.network.NetworkMonitor
 import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
+import com.am24.imbrel.domain.usecase.OpenCachedForecastUseCase
 import com.am24.imbrel.domain.usecase.RecordCitySearchUseCase
 import com.am24.imbrel.domain.usecase.SearchCityWeatherUseCase
 import com.am24.imbrel.presentation.mapper.WeatherPresentationMapper
@@ -42,6 +44,7 @@ class MainViewModel(
     networkMonitor: NetworkMonitor,
     private val selectedPlaceRepository: SelectedPlaceRepository,
     private val recordCitySearchUseCase: RecordCitySearchUseCase,
+    private val openCachedForecast: OpenCachedForecastUseCase? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
@@ -182,6 +185,32 @@ class MainViewModel(
     }
 
     fun requestCityWeather(city: String) = requestCityWeather(city, restoredPlace = null)
+
+    fun selectCachedForecast(entry: CachedForecast) {
+        lastRequest = Request.Cached(entry)
+        val id = beginRequest(Operation.CitySearch)
+        weatherRequestJob =
+            viewModelScope.launch {
+                try {
+                    val cached = requireNotNull(openCachedForecast)(entry.key)
+                    val weather = weatherPresentationMapper(cached.forecast, entry.label, includeCurrentWithoutDaily = true)
+                    currentCoroutineContext().ensureActive()
+                    if (!isCurrentRequest(id)) return@launch
+                    if (weather.current != null || weather.daily.isNotEmpty()) {
+                        entry.place?.let { saveSelection(id, it) }
+                    }
+                    showWeather(id, weather.current, weather.daily)
+                    if (isCurrentRequest(id)) _uiState.update { it.copy(cachedForecast = cached) }
+                } catch (cancellation: CancellationException) {
+                    clearCancelledRequest(id)
+                    throw cancellation
+                } catch (_: Exception) {
+                    showError(id, WeatherUiError.Cached())
+                } finally {
+                    finishRequest(id)
+                }
+            }
+    }
 
     fun selectCity(city: SavedCity) {
         requestCityWeather(city.normalizedQuery, city.toSelectedPlace(), persistSelection = true)
@@ -330,6 +359,7 @@ class MainViewModel(
 
     fun retryLastRequest() {
         when (val request = lastRequest) {
+            is Request.Cached -> selectCachedForecast(request.entry)
             is Request.City ->
                 requestCityWeather(
                     request.city,
@@ -425,6 +455,7 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 status = status,
+                cachedForecast = null,
                 currentWeather = current,
                 dailyWeather = daily,
                 error = null,
@@ -495,6 +526,10 @@ class MainViewModel(
     }
 
     private sealed interface Request {
+        data class Cached(
+            val entry: CachedForecast,
+        ) : Request
+
         data class City(
             val city: String,
             val restoredPlace: SelectedPlace.City?,

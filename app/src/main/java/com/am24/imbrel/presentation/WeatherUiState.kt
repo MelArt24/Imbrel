@@ -16,6 +16,7 @@ data class WeatherUiState(
     val isCitySearchLoading: Boolean = false,
     val isLocationLoading: Boolean = false,
     val isWeatherLoading: Boolean = false,
+    val cachedForecast: com.am24.imbrel.domain.model.CachedForecast? = null,
 ) {
     val isLoading: Boolean
         get() = status == WeatherUiStatus.Loading
@@ -73,6 +74,12 @@ sealed interface WeatherUiError {
     data class Location(
         override val cause: DomainError,
     ) : WeatherUiError
+
+    data class Cached(
+        override val cause: DomainError = DomainError.Unknown,
+    ) : WeatherUiError {
+        override fun messageResource(): Int = R.string.cache_unavailable
+    }
 
     data class Weather(
         override val cause: DomainError,

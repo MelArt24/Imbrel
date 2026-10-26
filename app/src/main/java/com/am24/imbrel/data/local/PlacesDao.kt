@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 @Suppress("TooManyFunctions")
 abstract class PlacesDao {
+    @Query("SELECT * FROM saved_cities")
+    abstract fun observeAll(): Flow<List<SavedCityEntity>>
+
     @Query("SELECT * FROM saved_cities WHERE isInHistory = 1 ORDER BY lastSearchedAtMillis DESC, id DESC")
     abstract fun observeHistory(): Flow<List<SavedCityEntity>>
 

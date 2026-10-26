@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.am24.imbrel.R
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.WeatherIconHelper
 import com.am24.imbrel.presentation.WeatherUiError
@@ -166,6 +167,7 @@ fun MainScreenContent(
                         ) {
                             MainCard(
                                 weather = uiState.currentWeather,
+                                cachedForecast = uiState.cachedForecast,
                                 onSyncClick = onLocationClick,
                                 onSearchClick = onSearchClick,
                             )
@@ -301,6 +303,7 @@ fun MainCard(
     weather: WeatherModel?,
     onSyncClick: () -> Unit,
     onSearchClick: () -> Unit,
+    cachedForecast: CachedForecast? = null,
 ) {
     Card(
         modifier =
@@ -382,6 +385,7 @@ fun MainCard(
                     )
                 }
             }
+            cachedForecast?.let { CachedForecastNotice(it) }
         }
     }
 }

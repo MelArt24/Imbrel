@@ -5,9 +5,14 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WeatherDao {
+    @Transaction
+    @Query("SELECT * FROM cached_weather ORDER BY cachedAtMillis DESC, cacheKey")
+    fun observeWeather(): Flow<List<CachedWeatherAggregate>>
+
     @Transaction
     @Query("SELECT * FROM cached_weather WHERE cacheKey = :cacheKey")
     suspend fun getWeather(cacheKey: String): CachedWeatherAggregate?

@@ -34,7 +34,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.am24.imbrel.R
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.domain.model.SavedCity
+import com.am24.imbrel.presentation.CachedPlacesState
 import com.am24.imbrel.presentation.PlacesUiState
 import com.am24.imbrel.presentation.PlacesViewModel
 
@@ -42,10 +44,21 @@ import com.am24.imbrel.presentation.PlacesViewModel
 fun PlacesScreen(
     viewModel: PlacesViewModel,
     onSearchClick: () -> Unit = {},
+    onCachedSelected: (CachedForecast) -> Unit = {},
     onCitySelected: (SavedCity) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    PlacesScreenContent(state, onCitySelected, viewModel::setFavorite, viewModel::clearHistory, viewModel::retry, onSearchClick)
+    val cache by viewModel.cachedState.collectAsStateWithLifecycle()
+    PlacesScreenContent(
+        state,
+        onCitySelected,
+        viewModel::setFavorite,
+        viewModel::clearHistory,
+        viewModel::retry,
+        onSearchClick,
+        cache,
+        onCachedSelected,
+    )
 }
 
 @Composable
@@ -56,6 +69,9 @@ fun PlacesScreenContent(
     onClearHistory: () -> Unit,
     onRetry: () -> Unit = {},
     onSearchClick: () -> Unit = {},
+    cache: CachedPlacesState =
+        CachedPlacesState(loading = false),
+    onCachedSelected: (CachedForecast) -> Unit = {},
 ) {
     var showClearConfirmation by rememberSaveable { mutableStateOf(false) }
     Surface(
@@ -64,6 +80,8 @@ fun PlacesScreenContent(
     ) {
         PlacesList(
             state,
+            cache,
+            onCachedSelected,
             PlacesListActions(onCitySelected, onFavoriteChanged, onSearchClick, { showClearConfirmation = true }, onRetry),
         )
     }
@@ -89,6 +107,8 @@ private class PlacesListActions(
 @Composable
 private fun PlacesList(
     state: PlacesUiState,
+    cache: CachedPlacesState,
+    onCachedSelected: (CachedForecast) -> Unit,
     actions: PlacesListActions,
 ) {
     val favoriteIds = state.favorites.map { it.id }.toSet()
@@ -133,6 +153,20 @@ private fun PlacesList(
             FavoriteCityCard(city, !state.isUpdating, actions.onCitySelected, actions.onFavoriteChanged)
         }
         recentPlaces(state, recent, actions)
+        item { SectionHeader(R.string.cached_weather, cache.items.size) }
+        if (cache.loading) item { CircularProgressIndicator() }
+        if (cache.error) {
+            item {
+                Column {
+                    Text(stringResource(R.string.cache_storage_error), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = actions.onRetry) { Text(stringResource(R.string.retry)) }
+                }
+            }
+        }
+        if (!cache.loading && !cache.error && cache.items.isEmpty()) {
+            item { Text(stringResource(R.string.cached_weather_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        items(cache.items, key = { "cache-${it.key}" }) { entry -> CachedWeatherCard(entry, onCachedSelected) }
     }
 }
 

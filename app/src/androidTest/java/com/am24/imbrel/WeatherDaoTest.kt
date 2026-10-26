@@ -9,6 +9,7 @@ import com.am24.imbrel.data.local.CachedHourlyWeatherEntity
 import com.am24.imbrel.data.local.CachedWeatherAggregate
 import com.am24.imbrel.data.local.CachedWeatherEntity
 import com.am24.imbrel.data.local.WeatherDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -35,6 +36,20 @@ class WeatherDaoTest {
     @After
     @Throws(IOException::class)
     fun closeDatabase() = database.close()
+
+    @Test
+    fun cacheObservation_reflectsInsertsAndReplacementWithoutDeletingExpiredRows() =
+        runBlocking {
+            val dao = database.weatherDao()
+            assertEquals(emptyList<CachedWeatherAggregate>(), dao.observeWeather().first())
+            dao.replaceWeather(aggregate("old", 0, 1, 1))
+            dao.replaceWeather(aggregate("new", 100, 1, 1))
+            assertEquals(listOf("new", "old"), dao.observeWeather().first().map { it.weather.cacheKey })
+            dao.replaceWeather(aggregate("old", 200, 2, 2))
+            val rows = dao.observeWeather().first()
+            assertEquals(listOf("old", "new"), rows.map { it.weather.cacheKey })
+            assertEquals(2, rows.first().daily.size)
+        }
 
     @Test
     fun insertAndRead_preservesAggregateAndTimestamp() =

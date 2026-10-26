@@ -29,6 +29,8 @@ import com.am24.imbrel.domain.repository.LocationRepository
 import com.am24.imbrel.domain.repository.PlacesRepository
 import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
+import com.am24.imbrel.domain.usecase.ObserveCachedForecastsUseCase
+import com.am24.imbrel.domain.usecase.OpenCachedForecastUseCase
 import com.am24.imbrel.presentation.AndroidWeatherConditionLocalizer
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.PlacesViewModel
@@ -86,9 +88,16 @@ val appModule =
                 timeProvider = get(),
                 cachePolicy = get(),
                 networkMonitor = get(),
+                placesDao = get(),
             )
         }
-        viewModel { PlacesViewModel(get(), get(), get(), get()) }
+        single {
+            ObserveCachedForecastsUseCase(get())
+        }
+        single {
+            OpenCachedForecastUseCase(get())
+        }
+        viewModel { PlacesViewModel(get(), get(), get(), get(), get()) }
 
         viewModel {
             MainViewModel(
@@ -97,6 +106,7 @@ val appModule =
                 searchCityWeatherUseCase = get(),
                 selectedPlaceRepository = get(),
                 recordCitySearchUseCase = get(),
+                openCachedForecast = get(),
                 weatherPresentationMapper = get(),
                 networkMonitor = get(),
             )

@@ -17,6 +17,7 @@ import com.am24.imbrel.domain.model.CurrentWeather
 import com.am24.imbrel.domain.model.WeatherForecast
 import com.am24.imbrel.domain.model.weatherConditionFromIcon
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -240,6 +241,39 @@ class WeatherRepositoryImplTest {
             assertSame(cancellation, thrown)
         }
 
+    @Test
+    fun openCachedOffline_neverCallsApiAndUsesExactKey() =
+        runTest {
+            val api = FakeApi()
+            val local = FakeLocalDataSource(CachedWeather(cachedForecast, now - dayMillis))
+            val result = repository(api, local, online = false).openCachedForecast("lat:1.0000|lon:2.0000")
+            assertEquals(cachedForecast, result.forecast)
+            assertEquals(com.am24.imbrel.domain.model.CacheStatus.Offline, result.status)
+            assertEquals("lat:1.0000|lon:2.0000", local.readKey)
+            assertEquals(0, api.calls)
+        }
+
+    @Test
+    fun openExpiredCache_rejectsWithoutApiEvenOnline() =
+        runTest {
+            val api = FakeApi()
+            val local = FakeLocalDataSource(CachedWeather(cachedForecast, now - dayMillis - 1))
+            val failure = captureFailure { repository(api, local).openCachedForecast("city:test") }
+            org.junit.Assert.assertTrue(failure is DomainFailureException)
+            assertEquals(0, api.calls)
+        }
+
+    @Test
+    fun cachedList_observesLocalDataAndRefreshesTtlWithoutApi() =
+        runTest {
+            val api = FakeApi()
+            val local = FakeLocalDataSource(CachedWeather(cachedForecast, now - dayMillis))
+            val result = repository(api, local).observeCachedForecasts().first()
+            assertEquals(1, result.size)
+            assertEquals(com.am24.imbrel.domain.model.CacheStatus.Offline, result.single().status)
+            assertEquals(0, api.calls)
+        }
+
     private fun repository(
         api: FakeApi,
         local: FakeLocalDataSource,
@@ -271,6 +305,11 @@ class WeatherRepositoryImplTest {
         var savedAt: Long? = null
         var readFailure: Exception? = null
         var writeFailure: Exception? = null
+
+        override fun observeWeather() =
+            kotlinx.coroutines.flow.flowOf(
+                cached?.let { mapOf("city:test" to it) } ?: emptyMap(),
+            )
 
         override suspend fun getWeather(cacheKey: String): CachedWeather? {
             readKey = cacheKey
