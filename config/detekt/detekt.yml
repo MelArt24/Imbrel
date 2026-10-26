@@ -11,8 +11,7 @@ complexity:
       - '**/test/**'
       - '**/androidTest/**'
   LongParameterList:
-    ignoreAnnotated:
-      - Composable
+    ignoreDefaultParameters: true
     excludes:
       - '**/data/remote/WeatherApiService.kt'
       - '**/data/repository/WeatherRepositoryImpl.kt'
@@ -30,7 +29,8 @@ complexity:
 naming:
   FunctionNaming:
     ignoreAnnotated:
-      - Composable
+      - 'Composable'
+      - 'androidx.compose.runtime.Composable'
     excludes:
       - '**/test/**'
       - '**/androidTest/**'

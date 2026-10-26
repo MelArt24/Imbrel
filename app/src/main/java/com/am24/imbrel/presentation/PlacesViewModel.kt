@@ -42,8 +42,18 @@ class PlacesViewModel(
     val uiState =
         reload
             .flatMapLatest {
-                combine(observeSearchHistory(), observeFavoriteCities(), operationState) { history, favorites, operation ->
-                    PlacesUiState(favorites, history, false, operation.hasError, operation.isUpdating)
+                combine(
+                    observeSearchHistory(),
+                    observeFavoriteCities(),
+                    operationState,
+                ) { history, favorites, operation ->
+                    PlacesUiState(
+                        favorites,
+                        history,
+                        false,
+                        operation.hasError,
+                        operation.isUpdating,
+                    )
                 }.onStart { emit(PlacesUiState()) }
                     .catch { emit(PlacesUiState(isLoading = false, hasStorageError = true)) }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), PlacesUiState())
