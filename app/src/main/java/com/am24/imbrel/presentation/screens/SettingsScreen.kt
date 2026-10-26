@@ -41,10 +41,10 @@ import com.am24.imbrel.domain.model.StartupMode
 import com.am24.imbrel.presentation.SettingsUiState
 import com.am24.imbrel.presentation.SettingsViewModel
 import com.am24.imbrel.presentation.theme.ScreenGradientBottomColor
+import com.am24.imbrel.presentation.theme.ScreenGradientTopColor
 import com.am24.imbrel.presentation.theme.SettingsAccentColor
 import com.am24.imbrel.presentation.theme.SettingsDialogColor
 import com.am24.imbrel.presentation.theme.SettingsSecondaryTextColor
-import com.am24.imbrel.presentation.theme.ScreenGradientTopColor
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel? = null) {

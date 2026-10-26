@@ -314,72 +314,74 @@ fun MainCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = weather?.time ?: "--/--/---- --:--",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
-                )
-                weather?.let {
-                    Image(
-                        painter = painterResource(id = WeatherIconHelper.getWeatherIcon(it.imageURL)),
-                        contentDescription = stringResource(R.string.current_weather_icon),
-                        modifier = Modifier.size(48.dp),
-                    )
-                } ?: Icon(
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = Color.White,
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = weather?.city ?: stringResource(R.string.your_city),
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-            )
-            Text(
-                text = weather?.currentTemperature ?: "--°C",
-                style = MaterialTheme.typography.displayLarge,
-                color = Color.White,
-            )
-            Text(
-                text = weather?.condition ?: "-",
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-            )
-            Text(
-                text = if (weather != null) "${weather.maximumTemperature}°C / ${weather.minimumTemperature}°C" else "--°C / --°C",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                IconButton(onClick = onSearchClick) {
+                IconButton(onClick = onSearchClick, modifier = Modifier.size(48.dp)) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_search),
+                        painter = painterResource(R.drawable.ic_search),
                         contentDescription = stringResource(R.string.search_your_city),
                         tint = Color.White,
                     )
                 }
-                IconButton(onClick = onSyncClick) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = weather?.city ?: stringResource(R.string.your_city),
+                        style = MaterialTheme.typography.headlineMedium,
+                        textAlign = TextAlign.Center,
+                        color = Color.White,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        weather?.let {
+                            Image(
+                                painter = painterResource(WeatherIconHelper.getWeatherIcon(it.imageURL)),
+                                contentDescription = stringResource(R.string.current_weather_icon),
+                                modifier = Modifier.size(40.dp),
+                            )
+                        } ?: Icon(
+                            painter = painterResource(R.drawable.ic_launcher_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = Color.White,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = weather?.currentTemperature ?: "--\u00B0C",
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.headlineLarge,
+                            textAlign = TextAlign.Center,
+                            color = Color.White,
+                        )
+                    }
+                    Text(
+                        text = weather?.condition ?: "-",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                    )
+                    Text(
+                        text =
+                            weather?.let { "${it.maximumTemperature}\u00B0C / ${it.minimumTemperature}\u00B0C" } ?: "--\u00B0C / --\u00B0C",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                    )
+                }
+                IconButton(onClick = onSyncClick, modifier = Modifier.size(48.dp)) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_sync),
+                        painter = painterResource(R.drawable.ic_sync),
                         contentDescription = stringResource(R.string.temperature_synchronization),
                         tint = Color.White,
                     )
