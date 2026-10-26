@@ -43,7 +43,7 @@ fun AdMobBannerSlot(
                 AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthDp)
             }
         val height = size.height.coerceAtLeast(MIN_BANNER_HEIGHT_DP).dp
-        BannerPlacement(height) {
+        BannerPlacement(height, isHome = isHome) {
             if (state.requestsAllowed && size.height > 0) {
                 key(size.width, size.height, orientation) { HomeBanner(state.showBanner(isHome), size) }
             }

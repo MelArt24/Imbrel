@@ -8,11 +8,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.am24.imbrel.ads.AdMobBanner
+import com.am24.imbrel.ads.BannerPlacement
 import com.am24.imbrel.ads.BannerView
 import com.google.android.gms.ads.AdSize
 import org.junit.Assert.assertEquals
@@ -99,6 +101,30 @@ class AdMobBannerLifecycleTest {
         composeRule.runOnIdle {
             assertTrue(banner.resumes > previousResumes)
             assertEquals(1, banner.loads)
+        }
+    }
+
+    @Test
+    fun collapsedPlacement_keepsBannerAliveWithoutReloading() {
+        val home = mutableStateOf(true)
+        lateinit var banner: FakeBanner
+        val factory: (Context, AdSize, (Boolean) -> Unit) -> BannerView = { context, _, onLoaded ->
+            FakeBanner(context, onLoaded).also { banner = it }
+        }
+        composeRule.setContent {
+            BannerPlacement(50.dp, isHome = home.value) { AdMobBanner(AdSize.BANNER, home.value, factory) }
+        }
+        composeRule.runOnIdle { home.value = false }
+        composeRule.runOnIdle {
+            assertEquals(1, banner.loads)
+            assertEquals(0, banner.destroys)
+            assertEquals(View.INVISIBLE, banner.view.visibility)
+            home.value = true
+        }
+        composeRule.runOnIdle {
+            assertEquals(1, banner.loads)
+            assertEquals(0, banner.destroys)
+            assertEquals(View.VISIBLE, banner.view.visibility)
         }
     }
 

@@ -58,7 +58,7 @@ class AdBannerPlacementTest {
     }
 
     @Test
-    fun consentChangesAndTabSwitches_doNotMoveNavigationButtonsOrExposeAdsOutsideHome() {
+    fun homeReservation_isStableWhileOtherTabsHaveNoAdvertisingGap() {
         showNavigation()
         val originalBounds = composeRule.onNodeWithTag("navigation_main").fetchSemanticsNode().boundsInRoot
         composeRule.onNodeWithTag("fake_banner").assertDoesNotExist()
@@ -68,7 +68,12 @@ class AdBannerPlacementTest {
         for (route in listOf("places", "settings")) {
             composeRule.onNodeWithTag("navigation_$route").performClick()
             composeRule.onNodeWithTag("fake_banner").assertDoesNotExist()
-            assertEquals(originalBounds, composeRule.onNodeWithTag("navigation_main").fetchSemanticsNode().boundsInRoot)
+            val compactBounds = composeRule.onNodeWithTag("navigation_main").fetchSemanticsNode().boundsInRoot
+            assertTrue(compactBounds.top > originalBounds.top)
+            val root = composeRule.onNodeWithTag("app_root").fetchSemanticsNode().boundsInRoot
+            val navigation = composeRule.onNodeWithTag("weather_navigation_bar").fetchSemanticsNode().boundsInRoot
+            val margin = with(composeRule.density) { 8.dp.toPx() }
+            assertEquals(bottomInset.toFloat() + margin, root.bottom - navigation.bottom, 1f)
         }
         composeRule.onNodeWithTag("navigation_main").performClick()
         composeRule.onNodeWithTag("fake_banner").assertIsDisplayed()
@@ -86,7 +91,7 @@ class AdBannerPlacementTest {
                         placesContent = { Text("Places") },
                         settingsContent = { Text("Settings") },
                         bannerContent = { isHome ->
-                            BannerPlacement(50.dp) {
+                            BannerPlacement(50.dp, isHome = isHome) {
                                 if (ads.value.showBanner(isHome)) Box(Modifier.fillMaxWidth().height(50.dp).testTag("fake_banner"))
                             }
                         },

@@ -5,9 +5,11 @@
 One standard anchored adaptive banner is hosted underneath the Home / Places /
 Settings navigation bar and above Android navigation insets. A non-interactive
 16 dp separator and divider separate navigation from the advertisement. The
-adaptive slot is reserved on every tab even before consent, while loading, and
-on load failure. Places and Settings render no advertisement. This reservation
-keeps navigation touch targets stationary when switching tabs or granting consent.
+adaptive slot is reserved on Home even before consent, while loading, and on
+load failure. Places and Settings collapse the slot and separator to zero height,
+placing navigation directly above the normal system inset and existing margin.
+Navigation therefore moves when switching between Home and these tabs, but remains
+stationary during consent updates and ad loading on Home.
 
 The banner first loads on Home after UMP permits requests and Mobile Ads finishes
 initializing. Its Android View survives tab switches, becomes invisible and pauses
@@ -60,7 +62,8 @@ IDs are supplied and release cannot silently fall back to test IDs.
 2. Finish any UMP form. The banner must have Google's test-ad label. Ads must not
    load if UMP does not allow requests. Never click live production ads to test.
 3. Switch Home / Places / Settings repeatedly: navigation buttons must stay at the
-   same vertical position and advertisements must appear only on Home.
+   same vertical position while Home ads load; Places and Settings must have no
+   advertising gap, and advertisements must appear only on Home.
 4. Rotate the phone and test gesture navigation, three-button navigation, a display
    cutout, split screen, and an offline / failed-load scenario. Blank reserved space
    is intentional; weather and navigation must continue working.
@@ -82,7 +85,7 @@ repeat first-install consent, reset app data only on a disposable test installat
 
 Automated tests use fake consent gateways, an SDK initializer, and banner Views.
 They never need a live ad response and do not initialize Mobile Ads or call a real
-advertising load. UI tests cover placement, stationary navigation targets, lifecycle,
+advertising load. UI tests cover placement, Home reservation, compact non-Home navigation, lifecycle,
 recomposition, failure, and privacy entry visibility.
 
 ## Before a Google Play AAB release
