@@ -274,6 +274,21 @@ class WeatherRepositoryImplTest {
             assertEquals(0, api.calls)
         }
 
+    @Test
+    fun clearWeatherCache_removesLocalForecastsWithoutApiAndPropagatesFailures() =
+        runTest {
+            val api = FakeApi()
+            val local = FakeLocalDataSource(CachedWeather(cachedForecast, now))
+            val repository = repository(api, local)
+            repository.clearWeatherCache()
+            assertEquals(null, local.cached)
+            assertEquals(emptyList<Any>(), repository.observeCachedForecasts().first())
+            assertEquals(0, api.calls)
+            val failure = IOException("Clear failed")
+            local.writeFailure = failure
+            assertSame(failure, captureFailure { repository.clearWeatherCache() })
+        }
+
     private fun repository(
         api: FakeApi,
         local: FakeLocalDataSource,
@@ -305,6 +320,11 @@ class WeatherRepositoryImplTest {
         var savedAt: Long? = null
         var readFailure: Exception? = null
         var writeFailure: Exception? = null
+
+        override suspend fun clearWeather() {
+            writeFailure?.let { throw it }
+            cached = null
+        }
 
         override fun observeWeather() =
             kotlinx.coroutines.flow.flowOf(

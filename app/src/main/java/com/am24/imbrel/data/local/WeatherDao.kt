@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WeatherDao {
+    @Query("DELETE FROM cached_weather")
+    suspend fun clearWeather()
+
     @Transaction
     @Query("SELECT * FROM cached_weather ORDER BY cachedAtMillis DESC, cacheKey")
     fun observeWeather(): Flow<List<CachedWeatherAggregate>>

@@ -6,6 +6,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
 interface WeatherRepository {
+    suspend fun clearWeatherCache() {
+        error("Cache clearing unavailable")
+    }
+
     fun observeCachedForecasts(): Flow<List<CachedForecast>> = flowOf(emptyList())
 
     suspend fun openCachedForecast(key: String): CachedForecast = error("Cache unavailable")

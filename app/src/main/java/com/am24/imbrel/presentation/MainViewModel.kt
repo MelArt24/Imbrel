@@ -16,6 +16,7 @@ import com.am24.imbrel.domain.usecase.GetCurrentLocationUseCase
 import com.am24.imbrel.domain.usecase.GetCurrentWeatherUseCase
 import com.am24.imbrel.domain.usecase.OpenCachedForecastUseCase
 import com.am24.imbrel.domain.usecase.RecordCitySearchUseCase
+import com.am24.imbrel.domain.usecase.ResolveStartupPlaceUseCase
 import com.am24.imbrel.domain.usecase.SearchCityWeatherUseCase
 import com.am24.imbrel.presentation.mapper.WeatherPresentationMapper
 import com.am24.imbrel.presentation.model.WeatherModel
@@ -45,6 +46,7 @@ class MainViewModel(
     private val selectedPlaceRepository: SelectedPlaceRepository,
     private val recordCitySearchUseCase: RecordCitySearchUseCase,
     private val openCachedForecast: OpenCachedForecastUseCase? = null,
+    private val resolveStartupPlace: ResolveStartupPlaceUseCase? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
@@ -85,7 +87,7 @@ class MainViewModel(
         viewModelScope.launch {
             val place =
                 try {
-                    selectedPlaceRepository.getSelectedPlace()
+                    resolveStartupPlace?.invoke() ?: selectedPlaceRepository.getSelectedPlace()
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (_: Exception) {

@@ -10,12 +10,14 @@ import androidx.navigation.compose.rememberNavController
 import com.am24.imbrel.presentation.screens.CitySearchDialog
 import com.am24.imbrel.presentation.screens.MainScreen
 import com.am24.imbrel.presentation.screens.PlacesScreen
+import com.am24.imbrel.presentation.screens.SettingsScreen
 
 @Composable
 fun WeatherApp(
     viewModel: MainViewModel,
     onLocationRequest: () -> Unit,
     placesViewModel: PlacesViewModel,
+    settingsViewModel: SettingsViewModel? = null,
 ) {
     val navController = rememberNavController()
     var showCitySearch by rememberSaveable { mutableStateOf(false) }
@@ -33,6 +35,7 @@ fun WeatherApp(
 
     WeatherNavigation(
         navController = navController,
+        settingsContent = { SettingsScreen(settingsViewModel) },
         placesContent = {
             PlacesScreen(placesViewModel, onSearchClick = {
                 navigateHome()

@@ -18,12 +18,14 @@ import com.am24.imbrel.data.local.WeatherLocalDataSource
 import com.am24.imbrel.data.network.AndroidNetworkMonitor
 import com.am24.imbrel.data.remote.RetrofitClient
 import com.am24.imbrel.data.remote.WeatherApiService
+import com.am24.imbrel.data.repository.DataStoreAppSettingsRepository
 import com.am24.imbrel.data.repository.DataStoreSelectedPlaceRepository
 import com.am24.imbrel.data.repository.GeocodingRepositoryImpl
 import com.am24.imbrel.data.repository.LocationRepositoryImpl
 import com.am24.imbrel.data.repository.RoomPlacesRepository
 import com.am24.imbrel.data.repository.WeatherRepositoryImpl
 import com.am24.imbrel.domain.network.NetworkMonitor
+import com.am24.imbrel.domain.repository.AppSettingsRepository
 import com.am24.imbrel.domain.repository.GeocodingRepository
 import com.am24.imbrel.domain.repository.LocationRepository
 import com.am24.imbrel.domain.repository.PlacesRepository
@@ -31,9 +33,11 @@ import com.am24.imbrel.domain.repository.SelectedPlaceRepository
 import com.am24.imbrel.domain.repository.WeatherRepository
 import com.am24.imbrel.domain.usecase.ObserveCachedForecastsUseCase
 import com.am24.imbrel.domain.usecase.OpenCachedForecastUseCase
+import com.am24.imbrel.domain.usecase.ResolveStartupPlaceUseCase
 import com.am24.imbrel.presentation.AndroidWeatherConditionLocalizer
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.PlacesViewModel
+import com.am24.imbrel.presentation.SettingsViewModel
 import com.am24.imbrel.presentation.WeatherConditionLocalizer
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.core.qualifier.named
@@ -48,8 +52,19 @@ private val Context.selectedPlaceDataStore: DataStore<Preferences> by preference
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
+private val Context.appSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "app_settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
+
 val appModule =
     module {
+        single<DataStore<Preferences>>(named("app_settings")) { get<Context>().appSettingsDataStore }
+        single<AppSettingsRepository> {
+            DataStoreAppSettingsRepository(get(named("app_settings")))
+        }
+        single { ResolveStartupPlaceUseCase(get(), get()) }
+        viewModel { SettingsViewModel(get(), get(), get()) }
         single<NetworkMonitor> { AndroidNetworkMonitor(get<Context>()) }
         single<DataStore<Preferences>> { get<Context>().locationDataStore }
         single<DataStore<Preferences>>(named("selected_place")) { get<Context>().selectedPlaceDataStore }
@@ -107,6 +122,7 @@ val appModule =
                 selectedPlaceRepository = get(),
                 recordCitySearchUseCase = get(),
                 openCachedForecast = get(),
+                resolveStartupPlace = get(),
                 weatherPresentationMapper = get(),
                 networkMonitor = get(),
             )

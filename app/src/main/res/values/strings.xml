@@ -78,4 +78,21 @@
     <string name="cache_updated">Updated: %1$s</string>
     <string name="cache_unavailable">Cached forecast is missing or expired. Choose another forecast.</string>
     <string name="cache_storage_error">Unable to read cached forecasts. Try again.</string>
+    <string name="startup_mode">Startup mode</string>
+    <string name="startup_last_selected">Last selected place</string>
+    <string name="startup_default_city">Default city</string>
+    <string name="startup_current_location">Current location</string>
+    <string name="default_city">Default city</string>
+    <string name="default_city_none">No default city selected</string>
+    <string name="choose_default_city">Choose from saved cities</string>
+    <string name="reset_default_city">Reset default city</string>
+    <string name="default_city_candidates_empty">Add a city to Favorites or Recent searches first.</string>
+    <string name="settings_cache">Cache</string>
+    <string name="settings_cache_count">Cached forecasts: %1$d</string>
+    <string name="clear_weather_cache">Clear weather cache</string>
+    <string name="clear_cache_confirmation">Delete all cached forecasts? Favorites, search history and settings will be kept. Offline forecasts will be unavailable until weather is loaded again.</string>
+    <string name="settings_error">Unable to load or update settings. Try again.</string>
+    <string name="settings_subtitle">Make Imbrel feel like home</string>
+    <string name="settings_default_city_hint">Choose a default city to enable this startup option.</string>
+    <string name="settings_cache_description">Saved forecasts keep your weather available offline.</string>
 </resources>

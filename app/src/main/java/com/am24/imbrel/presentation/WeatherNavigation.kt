@@ -49,6 +49,7 @@ private enum class WeatherDestination(
 fun WeatherNavigation(
     navController: NavHostController = rememberNavController(),
     placesContent: @Composable () -> Unit,
+    settingsContent: @Composable () -> Unit = { SettingsScreen() },
     homeContent: @Composable () -> Unit,
 ) {
     Scaffold(
@@ -62,7 +63,7 @@ fun WeatherNavigation(
         ) {
             composable(WeatherDestination.Home.route) { homeContent() }
             composable(WeatherDestination.Places.route) { placesContent() }
-            composable(WeatherDestination.Settings.route) { SettingsScreen() }
+            composable(WeatherDestination.Settings.route) { settingsContent() }
         }
     }
 }
@@ -72,7 +73,7 @@ private fun FloatingWeatherNavigationBar(navController: NavHostController) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val background =
         when (backStackEntry?.destination?.route) {
-            WeatherDestination.Home.route -> ScreenGradientBottomColor
+            WeatherDestination.Home.route, WeatherDestination.Settings.route -> ScreenGradientBottomColor
             WeatherDestination.Places.route -> colorResource(R.color.places_background)
             else -> MaterialTheme.colorScheme.surface
         }

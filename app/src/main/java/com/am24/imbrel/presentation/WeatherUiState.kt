@@ -5,6 +5,7 @@ import com.am24.imbrel.domain.error.ApiErrorReason
 import com.am24.imbrel.domain.error.DomainError
 import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.domain.error.NetworkErrorReason
+import com.am24.imbrel.domain.model.CachedForecast
 import com.am24.imbrel.presentation.model.WeatherModel
 
 data class WeatherUiState(
@@ -16,7 +17,7 @@ data class WeatherUiState(
     val isCitySearchLoading: Boolean = false,
     val isLocationLoading: Boolean = false,
     val isWeatherLoading: Boolean = false,
-    val cachedForecast: com.am24.imbrel.domain.model.CachedForecast? = null,
+    val cachedForecast: CachedForecast? = null,
 ) {
     val isLoading: Boolean
         get() = status == WeatherUiStatus.Loading

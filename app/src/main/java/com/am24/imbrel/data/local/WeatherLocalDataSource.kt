@@ -11,6 +11,10 @@ data class CachedWeather(
 )
 
 interface WeatherLocalDataSource {
+    suspend fun clearWeather() {
+        error("Cache clearing unavailable")
+    }
+
     fun observeWeather(): Flow<Map<String, CachedWeather>> = flowOf(emptyMap())
 
     suspend fun getWeather(cacheKey: String): CachedWeather?
@@ -25,6 +29,8 @@ interface WeatherLocalDataSource {
 class RoomWeatherLocalDataSource(
     private val weatherDao: WeatherDao,
 ) : WeatherLocalDataSource {
+    override suspend fun clearWeather() = weatherDao.clearWeather()
+
     override fun observeWeather() =
         weatherDao.observeWeather().map { rows ->
             rows.associate { it.weather.cacheKey to it.toCachedWeather() }

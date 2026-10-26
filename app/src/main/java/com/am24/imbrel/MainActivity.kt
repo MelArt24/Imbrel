@@ -24,6 +24,7 @@ import com.am24.imbrel.domain.error.LocationErrorReason
 import com.am24.imbrel.presentation.DialogManager
 import com.am24.imbrel.presentation.MainViewModel
 import com.am24.imbrel.presentation.PlacesViewModel
+import com.am24.imbrel.presentation.SettingsViewModel
 import com.am24.imbrel.presentation.WeatherApp
 import com.am24.imbrel.presentation.theme.WeatherForecastAppTheme
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val viewModel: MainViewModel by viewModel()
         val placesViewModel: PlacesViewModel by viewModel()
+        val settingsViewModel: SettingsViewModel by viewModel()
         setContent {
             val context = LocalContext.current
             var permissionRequestId by rememberSaveable { mutableLongStateOf(-1L) }
@@ -77,7 +79,7 @@ class MainActivity : ComponentActivity() {
             }
 
             WeatherForecastAppTheme {
-                WeatherApp(viewModel, requestLocation, placesViewModel)
+                WeatherApp(viewModel, requestLocation, placesViewModel, settingsViewModel)
             }
         }
     }

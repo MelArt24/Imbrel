@@ -78,4 +78,21 @@
     <string name="cache_updated">Оновлено: %1$s</string>
     <string name="cache_unavailable">Прогноз відсутній або прострочений. Виберіть інший прогноз.</string>
     <string name="cache_storage_error">Не вдалося прочитати кешовані прогнози. Спробуйте ще раз.</string>
+    <string name="startup_mode">Режим запуску</string>
+    <string name="startup_last_selected">Останнє вибране місце</string>
+    <string name="startup_default_city">Місто за замовчуванням</string>
+    <string name="startup_current_location">Поточне місцеположення</string>
+    <string name="default_city">Місто за замовчуванням</string>
+    <string name="default_city_none">Місто за замовчуванням не вибрано</string>
+    <string name="choose_default_city">Вибрати зі збережених міст</string>
+    <string name="reset_default_city">Скинути місто за замовчуванням</string>
+    <string name="default_city_candidates_empty">Спочатку додайте місто до обраного або історії пошуку.</string>
+    <string name="settings_cache">Кеш</string>
+    <string name="settings_cache_count">Кешованих прогнозів: %1$d</string>
+    <string name="clear_weather_cache">Очистити кеш погоди</string>
+    <string name="clear_cache_confirmation">Видалити всі кешовані прогнози? Обране, історія пошуку й налаштування збережуться. Прогнози офлайн будуть недоступні до наступного завантаження погоди.</string>
+    <string name="settings_error">Не вдалося завантажити або оновити налаштування. Спробуйте ще раз.</string>
+    <string name="settings_subtitle">Налаштуйте Imbrel під себе</string>
+    <string name="settings_default_city_hint">Виберіть місто за замовчуванням, щоб увімкнути цей режим запуску.</string>
+    <string name="settings_cache_description">Збережені прогнози допомагають переглядати погоду офлайн.</string>
 </resources>

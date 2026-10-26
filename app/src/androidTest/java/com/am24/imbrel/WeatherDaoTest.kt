@@ -38,6 +38,49 @@ class WeatherDaoTest {
     fun closeDatabase() = database.close()
 
     @Test
+    fun clearWeather_cascadesToDetailsAndPreservesSavedCities() =
+        runBlocking {
+            database.weatherDao().replaceWeather(aggregate("city:kyiv", 1, 2, 2))
+            val city =
+                com.am24.imbrel.data.local.SavedCityEntity(
+                    queryKey = "kyiv",
+                    normalizedQuery = "Kyiv",
+                    displayName = "Kyiv",
+                    latitude = 50.45,
+                    longitude = 30.52,
+                    lastSearchedAtMillis = 1,
+                    isFavorite = true,
+                )
+            database.placesDao().insert(city)
+            database.weatherDao().clearWeather()
+            assertEquals(emptyList<CachedWeatherAggregate>(), database.weatherDao().observeWeather().first())
+            listOf("cached_weather", "cached_hourly_weather", "cached_daily_weather").forEach { table ->
+                database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                    cursor.moveToFirst()
+                    assertEquals(0, cursor.getInt(0))
+                }
+            }
+            assertEquals(
+                "Kyiv",
+                database
+                    .placesDao()
+                    .observeHistory()
+                    .first()
+                    .single()
+                    .displayName,
+            )
+            assertEquals(
+                true,
+                database
+                    .placesDao()
+                    .observeFavorites()
+                    .first()
+                    .single()
+                    .isFavorite,
+            )
+        }
+
+    @Test
     fun cacheObservation_reflectsInsertsAndReplacementWithoutDeletingExpiredRows() =
         runBlocking {
             val dao = database.weatherDao()

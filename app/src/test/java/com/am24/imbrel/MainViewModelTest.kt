@@ -1702,6 +1702,98 @@ class MainViewModelTest {
             )
         }
 
+    @Test
+    fun defaultStartupCity_bypassesGpsAndGeocodingWithoutChangingSelectionOrHistory() =
+        runTest(testDispatcher) {
+            val place = SelectedPlace.City("Kyiv", "Kyiv", LocationCoordinates(50.45, 30.52))
+            val settings =
+                FakeAppSettingsRepository(
+                    com.am24.imbrel.domain.model.AppSettings(
+                        com.am24.imbrel.domain.model.StartupMode.DefaultCity,
+                        place,
+                    ),
+                )
+            val selected = FakeSelectedPlaceRepository(SelectedPlace.CurrentLocation)
+            val places = FakePlacesRepository()
+            val repository = FakeWeatherRepository()
+            val vm =
+                viewModel(
+                    repository,
+                    locationRepository = FakeLocationRepository(currentFailure = IllegalStateException("GPS must not run")),
+                    geocodingRepository = FakeGeocodingRepository(found = false),
+                    selectedPlaceRepository = selected,
+                    placesRepository = places,
+                    settingsRepository = settings,
+                )
+            vm.initializeStartup()
+            vm.initializeStartup()
+            advanceUntilIdle()
+            assertEquals(WeatherUiStatus.Success, vm.uiState.value.status)
+            assertEquals("50.45", repository.lastLat)
+            assertTrue(selected.writes.isEmpty())
+            assertTrue(places.searches.isEmpty())
+            assertEquals(0, selected.readCount)
+            vm.requestCityWeather("Lviv")
+            advanceUntilIdle()
+            assertEquals(place, settings.settings.value.defaultCity)
+            assertEquals(com.am24.imbrel.domain.model.StartupMode.DefaultCity, settings.settings.value.startupMode)
+        }
+
+    @Test
+    fun currentLocationStartup_usesExistingSavedGpsPermissionFallback() =
+        runTest(testDispatcher) {
+            val repository = FakeWeatherRepository()
+            val vm =
+                viewModel(
+                    repository,
+                    locationRepository = FakeLocationRepository(savedLocation = UserLocation(1.0, 2.0, null)),
+                    settingsRepository =
+                        FakeAppSettingsRepository(
+                            com.am24.imbrel.domain.model.AppSettings(
+                                com.am24.imbrel.domain.model.StartupMode.CurrentLocation,
+                            ),
+                        ),
+                )
+            vm.initializeStartup()
+            runCurrent()
+            val request = vm.locationRequests.first()
+            vm.requestSavedLocationOrPermission(request.id)
+            advanceUntilIdle()
+            assertEquals("1.0", repository.lastLat)
+            assertEquals("2.0", repository.lastLon)
+            assertEquals(WeatherUiStatus.Success, vm.uiState.value.status)
+        }
+
+    @Test
+    fun lateStartupSettings_cannotOverrideManualSelection() =
+        runTest(testDispatcher) {
+            val pending = CompletableDeferred<com.am24.imbrel.domain.model.AppSettings>()
+            val settings =
+                object : com.am24.imbrel.domain.repository.AppSettingsRepository {
+                    override fun observeSettings() =
+                        kotlinx.coroutines.flow.flow {
+                            emit(withContext(NonCancellable) { pending.await() })
+                        }
+
+                    override suspend fun setStartupMode(mode: com.am24.imbrel.domain.model.StartupMode) = Unit
+
+                    override suspend fun setDefaultCity(city: SelectedPlace.City?) = Unit
+                }
+            val repository = FakeWeatherRepository()
+            val vm = viewModel(repository, settingsRepository = settings)
+            vm.initializeStartup()
+            runCurrent()
+            vm.requestCityWeather("Lviv")
+            runCurrent()
+            pending.complete(
+                com.am24.imbrel.domain.model
+                    .AppSettings(),
+            )
+            advanceUntilIdle()
+            assertEquals("Lviv", repository.lastCity)
+            assertEquals(WeatherUiStatus.Success, vm.uiState.value.status)
+        }
+
     private class FakeSelectedPlaceRepository(
         var value: SelectedPlace? = null,
         private val read: (suspend () -> SelectedPlace?)? = null,
@@ -1733,6 +1825,7 @@ class MainViewModelTest {
         networkMonitor: FakeNetworkMonitor = FakeNetworkMonitor(),
         selectedPlaceRepository: SelectedPlaceRepository = FakeSelectedPlaceRepository(),
         placesRepository: FakePlacesRepository = FakePlacesRepository(),
+        settingsRepository: com.am24.imbrel.domain.repository.AppSettingsRepository? = null,
     ) = MainViewModel(
         GetCurrentWeatherUseCase(repository),
         GetCurrentLocationUseCase(locationRepository, networkMonitor),
@@ -1746,6 +1839,10 @@ class MainViewModelTest {
         RecordCitySearchUseCase(placesRepository),
         com.am24.imbrel.domain.usecase
             .OpenCachedForecastUseCase(repository),
+        settingsRepository?.let {
+            com.am24.imbrel.domain.usecase
+                .ResolveStartupPlaceUseCase(it, selectedPlaceRepository)
+        },
     )
 
     private class FakeLocationRepository(

@@ -43,6 +43,8 @@ class WeatherRepositoryImpl(
     private val timezone: String = ZoneId.systemDefault().id,
     private val placesDao: PlacesDao? = null,
 ) : WeatherRepository {
+    override suspend fun clearWeatherCache() = localDataSource.clearWeather()
+
     override fun observeCachedForecasts() =
         combine(
             localDataSource.observeWeather(),
